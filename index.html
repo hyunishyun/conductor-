@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=600, height=600, initial-scale=1.0, user-scalable=no">
+<title>CONDUCTOR</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Manrope:wght@400;500;600&display=swap">
+<style>
+/* CONDUCTOR — gesture tutorial for Meta Ray-Ban Display.
+   Single-theme by design: the glasses display is additive, so pure black is transparent. */
+:root{
+  --ink:#000000;
+  --ivory:#F6F1E3;
+  --cyan:#5EE7FF;
+  --gold:#F2C76B;
+  --dim:rgba(246,241,227,0.55);
+  --display:'Cormorant Garamond',Georgia,'Times New Roman',serif;
+  --ui:'Manrope',system-ui,-apple-system,'Segoe UI',sans-serif;
+  color-scheme:dark;
+}
+html,body{height:100%;margin:0;background:var(--ink);color:var(--ivory);overflow:hidden;
+  touch-action:none; /* opt-in to continuous pinch-and-drag pointer events (Meta Web App docs) */
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+body{font-family:var(--ui);display:flex;align-items:center;justify-content:center}
+#stage{position:relative;width:600px;height:600px;flex:0 0 auto;background:var(--ink);overflow:hidden;outline:none}
+#c{position:absolute;inset:0;width:600px;height:600px;display:block}
+#ui{position:absolute;inset:0;pointer-events:none}
+#ui > *{position:absolute;left:0;right:0;text-align:center}
+#eyebrow{top:26px;font:500 11px/1 var(--ui);letter-spacing:0.22em;text-transform:uppercase;color:var(--cyan);opacity:0.85;transition:opacity .5s}
+#wordmark{top:96px;font:500 34px/1 var(--display);letter-spacing:0.34em;text-transform:uppercase;color:var(--ivory);text-indent:0.34em}
+#tagline{top:142px;font:italic 400 16px/1.3 var(--display);color:var(--dim);letter-spacing:0.02em}
+#wordmark,#tagline{transition:opacity .9s ease}
+.gone{opacity:0!important}
+#prompt{bottom:52px;padding:0 48px;font:500 24px/1.25 var(--display);color:var(--ivory);text-wrap:balance;
+  text-shadow:0 0 18px rgba(246,241,227,0.35);transition:opacity .35s ease,transform .35s ease}
+#prompt.swap{opacity:0;transform:translateY(4px)}
+#prompt em{font-style:italic;color:var(--gold)}
+#legend{bottom:18px;font:500 11px/1 var(--ui);letter-spacing:0.14em;text-transform:uppercase;color:rgba(94,231,255,0.72)}
+#legend span{margin:0 9px;white-space:nowrap}
+#readout{top:24px;right:22px;left:auto;text-align:right;font:500 12px/1.2 var(--ui);letter-spacing:0.08em;color:var(--dim);font-variant-numeric:tabular-nums}
+#readout b{font-weight:600;color:var(--ivory)}
+#bravo{top:100px;font:italic 500 64px/1 var(--display);color:var(--gold);letter-spacing:0.04em;
+  text-shadow:0 0 28px rgba(242,199,107,0.6);opacity:0;transform:scale(0.92);transition:opacity 1.2s ease,transform 1.2s ease}
+#bravo.show{opacity:1;transform:scale(1)}
+#dev{position:absolute;top:0;right:0;width:236px;max-height:600px;overflow:hidden;padding:10px 12px;box-sizing:border-box;
+  background:rgba(0,0,0,0.78);border-left:1px solid rgba(94,231,255,0.3);color:#cfe;font:11px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;pointer-events:none}
+#dev h4{margin:0 0 4px;font:600 11px/1 var(--ui);letter-spacing:0.12em;text-transform:uppercase;color:var(--cyan)}
+@media (prefers-reduced-motion:reduce){#prompt,#bravo,#wordmark,#tagline{transition:none}}
+</style>
+</head>
+<body>
+<div id="stage" tabindex="0" aria-label="CONDUCTOR orchestra stage">
+  <canvas id="c" width="600" height="600" aria-hidden="true"></canvas>
+  <div id="ui">
+    <div id="eyebrow">Overture</div>
+    <div id="wordmark">Conductor</div>
+    <div id="tagline">One gesture begins a note.<br>Every gesture brings your orchestra to life.</div>
+    <div id="bravo">Bravo</div>
+    <div id="prompt" role="status" aria-live="polite">Your orchestra is waiting.<br>Pinch once to give your first cue.</div>
+    <div id="legend"><span>Pinch</span></div>
+    <div id="readout"></div>
+  </div>
+  <div id="dev" hidden></div>
+</div>
+<script>
+'use strict';
+/* =====================================================================
+   CONDUCTOR — modules
+   Log      verification log (visible in the dev overlay, key D)
+   Score    the original melody and harmony
+   Audio    Web Audio synth orchestra: buses, voices, reverb
+   Clock    shared musical clock (lookahead scheduler, tempo, ritardando)
+   Layers   instrument sections that read the same step counter
+   Visual   canvas rendering: musicians, baton, rings, trails, particles
+   Input    keyboard + opt-in pointer drag → abstract actions
+   Game     the five chapters (state machine)
+   Dev      overlay for verifying audio/clock behaviour
+   ===================================================================== */
+const TAU = Math.PI * 2;
+const $ = s => document.querySelector(s);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+
+/* ---------------- Log ---------------- */
+const Log = {
+  lines: [], t0: performance.now(),
+  add(msg) {
+    const t = ((performance.now() - this.t0) / 1000).toFixed(2).padStart(6);
+    this.lines.push(`${t}s  ${msg}`);
+    if (this.lines.length > 60) this.lines.shift();
+    Dev.dirty = true;
+  }
+};
+
+/* ---------------- Score ---------------- */
+/* An original two-bar melody in D major (16 steps per bar, 4 per beat). */
+const Score = {
+  key: 'D major',
+  melody: [
+    { n: 74, len: 4 }, { n: 76, len: 4 }, { n: 78, len: 4 }, { n: 81, len: 4 },
+    { n: 83, len: 6 }, { n: 81, len: 2 }, { n: 78, len: 4 }, { n: 74, len: 4 }
+  ],
+  chords: [
+    { name: 'D',  root: 50, tones: [62, 66, 69] },
+    { name: 'Bm', root: 47, tones: [62, 66, 71] },
+    { name: 'G',  root: 43, tones: [62, 67, 71] },
+    { name: 'A',  root: 45, tones: [61, 64, 69] }
+  ],
+  chordAtBar(bar) { return this.chords[((bar % 4) + 4) % 4]; }
+};
+Score.melodyStarts = (() => { let s = 0; return Score.melody.map(m => { const o = s; s += m.len; return o; }); })();
+
+/* ---------------- Audio ---------------- */
+const Audio = (() => {
+  let ctx = null, master = null, comp = null, reverb = null, reverbReturn = null, noiseBuf = null;
+  const bus = {};
+  const BUS = {
+    solo:    { level: 0.95, send: 0.55, filter: false },
+    strings: { level: 0.80, send: 0.45, filter: true },
+    winds:   { level: 0.50, send: 0.50, filter: true },
+    brass:   { level: 0.60, send: 0.35, filter: true },
+    perc:    { level: 0.85, send: 0.30, filter: false }
+  };
+  const stats = { createdAt: null, userNotes: 0, scheduledNotes: 0 };
+
+  function makeIR() {
+    const len = Math.floor(ctx.sampleRate * 2.8);
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const d = buf.getChannelData(c);
+      for (let i = 0; i < len; i++) {
+        const x = i / len;
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - x, 2.7) * (1 - Math.exp(-i / 240));
+      }
+    }
+    return buf;
+  }
+  function makeNoise() {
+    const b = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    return b;
+  }
+  /* Create the context. Only ever called from inside a user-gesture handler. */
+  function ensure() {
+    if (ctx) { if (ctx.state !== 'running') ctx.resume().catch(() => {}); return ctx; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { Log.add('Web Audio API unavailable'); return null; }
+    ctx = new AC({ latencyHint: 'interactive' });
+    stats.createdAt = ctx.currentTime;
+    Log.add(`AudioContext created by user gesture (state ${ctx.state}, ${ctx.sampleRate} Hz)`);
+    if (ctx.state !== 'running') {
+      ctx.resume().then(() => Log.add('AudioContext resumed → running')).catch(e => Log.add('resume failed: ' + e));
+    }
+    comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -16; comp.knee.value = 12; comp.ratio.value = 3; comp.attack.value = 0.005; comp.release.value = 0.25;
+    master = ctx.createGain(); master.gain.value = 0.85;
+    master.connect(comp); comp.connect(ctx.destination);
+    reverb = ctx.createConvolver(); reverb.buffer = makeIR();
+    reverbReturn = ctx.createGain(); reverbReturn.gain.value = 0.55;
+    reverb.connect(reverbReturn); reverbReturn.connect(master);
+    noiseBuf = makeNoise();
+    for (const [name, def] of Object.entries(BUS)) {
+      const inp = ctx.createGain(); let node = inp; let filter = null;
+      if (def.filter) {
+        filter = ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 2600; filter.Q.value = 0.5;
+        inp.connect(filter); node = filter;
+      }
+      const level = ctx.createGain(); level.gain.value = def.level;
+      const send = ctx.createGain(); send.gain.value = def.send;
+      node.connect(level); level.connect(master); level.connect(send); send.connect(reverb);
+      bus[name] = { inp, filter, level, send, base: def.level, intensity: 1 };
+    }
+    return ctx;
+  }
+  /* Smooth dynamics: gain + brightness follow the section's intensity (0..1). */
+  function setIntensity(name, v) {
+    const b = bus[name]; if (!b || !ctx) return;
+    b.intensity = v; const t = ctx.currentTime;
+    b.level.gain.setTargetAtTime(b.base * (0.04 + 0.96 * Math.pow(v, 1.5)), t, 0.09);
+    if (b.filter) b.filter.frequency.setTargetAtTime(500 + Math.pow(v, 1.4) * 6500, t, 0.09);
+  }
+  function osc(type, f, t) { const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, t); return o; }
+  function vibrato(t, rate, cents, onset) {
+    const l = osc('sine', rate, t); const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(cents, t + onset); l.connect(g); l.start(t); return { l, g };
+  }
+
+  /* The soloist: a harp-like cue with a soft bowed bloom underneath. */
+  function playSolo(midi, t, vel = 0.8) {
+    if (!ctx) return; const f = mtof(midi), b = bus.solo; stats.scheduledNotes++;
+    const parts = [['sine', 1, 0.62, 0.62], ['triangle', 2, 0.14, 0.30], ['sine', 3.003, 0.07, 0.18], ['sine', 5.98, 0.025, 0.09]];
+    parts.forEach(([type, r, gn, tau]) => {
+      const o = osc(type, f * r, t); const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gn * vel, t + 0.005);
+      g.gain.setTargetAtTime(0, t + 0.012, tau);
+      o.connect(g); g.connect(b.inp); o.start(t); o.stop(t + tau * 6.5 + 0.1);
+    });
+    const bloom = osc('sine', f / 2, t); const bg = ctx.createGain();
+    bg.gain.setValueAtTime(0, t); bg.gain.linearRampToValueAtTime(0.11 * vel, t + 0.14); bg.gain.setTargetAtTime(0, t + 0.16, 0.7);
+    bloom.connect(bg); bg.connect(b.inp); bloom.start(t); bloom.stop(t + 4);
+  }
+  function playStrings(midi, t, dur, vel = 0.8) {
+    if (!ctx) return; const f = mtof(midi), b = bus.strings; stats.scheduledNotes++;
+    const attack = Math.min(0.3, dur * 0.45); const vib = vibrato(t, 5.1, 6, 0.7);
+    [-8, 0, 8].forEach(dt => {
+      const o = osc('sawtooth', f, t); o.detune.setValueAtTime(dt, t); vib.g.connect(o.detune);
+      const g = ctx.createGain(); const peak = 0.075 * vel;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + attack);
+      g.gain.setTargetAtTime(0, t + dur, 0.18);
+      o.connect(g); g.connect(b.inp); o.start(t); o.stop(t + dur + 1.1);
+    });
+    vib.l.stop(t + dur + 1.1);
+  }
+  function playStringsBass(midi, t, dur, vel = 0.9) {
+    if (!ctx) return; const f = mtof(midi), b = bus.strings; stats.scheduledNotes++;
+    const o = osc('sawtooth', f, t), s = osc('sine', f / 2, t);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420;
+    const g = ctx.createGain(); const peak = 0.16 * vel;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + Math.min(0.25, dur * 0.4)); g.gain.setTargetAtTime(0, t + dur, 0.15);
+    const sg = ctx.createGain(); sg.gain.value = 0.45;
+    o.connect(lp); s.connect(sg); sg.connect(lp); lp.connect(g); g.connect(b.inp);
+    o.start(t); s.start(t); o.stop(t + dur + 1); s.stop(t + dur + 1);
+  }
+  function playWinds(midi, t, dur, vel = 0.6) {
+    if (!ctx) return; const f = mtof(midi), b = bus.winds; stats.scheduledNotes++;
+    const o1 = osc('triangle', f, t), o2 = osc('sine', f, t); const vib = vibrato(t, 5.6, 4, 0.18);
+    vib.g.connect(o1.detune);
+    const g = ctx.createGain(); const peak = 0.17 * vel;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + 0.035); g.gain.setTargetAtTime(0, t + dur, 0.07);
+    const g2 = ctx.createGain(); g2.gain.value = 0.45;
+    o1.connect(g); o2.connect(g2); g2.connect(g); g.connect(b.inp);
+    o1.start(t); o2.start(t); o1.stop(t + dur + 0.6); o2.stop(t + dur + 0.6); vib.l.stop(t + dur + 0.6);
+    const n = ctx.createBufferSource(); n.buffer = noiseBuf; n.loop = true;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f * 2; bp.Q.value = 7;
+    const ng = ctx.createGain(); ng.gain.setValueAtTime(0, t); ng.gain.linearRampToValueAtTime(0.03 * vel, t + 0.012); ng.gain.setTargetAtTime(0, t + 0.02, 0.12);
+    n.connect(bp); bp.connect(ng); ng.connect(b.inp); n.start(t); n.stop(t + 0.8);
+  }
+  function playBrass(midi, t, dur, vel = 0.6) {
+    if (!ctx) return; const f = mtof(midi), b = bus.brass; stats.scheduledNotes++;
+    const o1 = osc('sawtooth', f, t), o2 = osc('sawtooth', f, t), o3 = osc('square', f / 2, t);
+    o2.detune.setValueAtTime(6, t); const vib = vibrato(t, 5.4, 5, 0.3); vib.g.connect(o1.detune);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 1.2;
+    lp.frequency.setValueAtTime(220, t); lp.frequency.linearRampToValueAtTime(900 + vel * 3200, t + 0.05);
+    lp.frequency.setTargetAtTime(650 + vel * 1600, t + 0.06, 0.28);
+    const g = ctx.createGain(); const peak = 0.11 * vel;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + 0.03); g.gain.setTargetAtTime(0, t + dur, 0.11);
+    const g3 = ctx.createGain(); g3.gain.value = 0.3;
+    o1.connect(lp); o2.connect(lp); o3.connect(g3); g3.connect(lp); lp.connect(g); g.connect(b.inp);
+    [o1, o2, o3].forEach(o => { o.start(t); o.stop(t + dur + 0.8); }); vib.l.stop(t + dur + 0.8);
+  }
+  function playTimpani(midi, t, vel = 0.8) {
+    if (!ctx) return; const f = mtof(midi), b = bus.perc; stats.scheduledNotes++;
+    const o = osc('sine', f * 1.7, t); o.frequency.exponentialRampToValueAtTime(f, t + 0.045);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.9 * vel, t + 0.006); g.gain.setTargetAtTime(0, t + 0.02, 0.28);
+    o.connect(g); g.connect(b.inp); o.start(t); o.stop(t + 1.8);
+    const n = ctx.createBufferSource(); n.buffer = noiseBuf;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500;
+    const ng = ctx.createGain(); ng.gain.setValueAtTime(0.18 * vel, t); ng.gain.setTargetAtTime(0, t + 0.005, 0.05);
+    n.connect(lp); lp.connect(ng); ng.connect(b.inp); n.start(t); n.stop(t + 0.4);
+  }
+  function suspend() { if (ctx && ctx.state === 'running') ctx.suspend().then(() => Log.add('AudioContext suspended (hidden)')).catch(() => {}); }
+  function resume() { if (ctx && ctx.state === 'suspended') ctx.resume().then(() => Log.add('AudioContext resumed (visible)')).catch(() => {}); }
+  /* Fade and close the whole context. The next first pinch builds a fresh one. */
+  function shutdown() {
+    if (!ctx) return; const c = ctx, m = master;
+    try { m.gain.setTargetAtTime(0, c.currentTime, 0.07); } catch (_) {}
+    ctx = null; master = null; for (const k in bus) delete bus[k];
+    setTimeout(() => { c.close().then(() => Log.add('AudioContext closed')).catch(() => {}); }, 450);
+  }
+  return {
+    ctx: () => ctx, stats, ensure, setIntensity, suspend, resume, shutdown,
+    playSolo, playStrings, playStringsBass, playWinds, playBrass, playTimpani,
+    now: () => (ctx ? ctx.currentTime : 0), bus: () => bus
+  };
+})();
+
+/* ---------------- Clock ---------------- */
+/* One lookahead scheduler drives every section. Tempo changes alter the length of
+   FUTURE steps only, so already-scheduled notes never shift and no layer drifts. */
+const Clock = (() => {
+  const S = { bpm: 84, running: false, step: 0, nextTime: 0, timer: null, startedAt: null,
+              beats: [], lookahead: 0.16, interval: 25, rit: null, paused: false };
+  const stepDur = () => 60 / S.bpm / 4;
+  function tick() {
+    const ctx = Audio.ctx(); if (!ctx || !S.running) return;
+    const now = ctx.currentTime;
+    if (S.nextTime < now - 0.35) {           /* timer was throttled: resync on the grid */
+      const missed = Math.floor((now - S.nextTime) / stepDur()) + 1;
+      S.step += missed; S.nextTime += missed * stepDur();
+      Log.add(`clock resynced (+${missed} steps)`);
+    }
+    while (S.running && S.nextTime < now + S.lookahead) {
+      const t = S.nextTime, st = S.step;
+      if (st % 4 === 0) { S.beats.push({ t, idx: (st / 4) | 0 }); if (S.beats.length > 24) S.beats.shift(); }
+      if (S.rit && st >= S.rit.start) S.bpm = Math.max(36, S.bpm * S.rit.factor);
+      Layers.onStep(st, t, stepDur());
+      S.step++; S.nextTime += stepDur();
+    }
+  }
+  return {
+    get bpm() { return S.bpm; },
+    set bpm(v) { S.bpm = clamp(v, 60, 140); },
+    get step() { return S.step; }, get running() { return S.running; }, get startedAt() { return S.startedAt; },
+    stepDur, beatDur: () => 60 / S.bpm,
+    start(at) {
+      S.step = 0; S.nextTime = at; S.startedAt = at; S.running = true; S.rit = null; S.beats = [];
+      clearInterval(S.timer); S.timer = setInterval(tick, S.interval); tick();
+      Log.add(`clock started at ${at.toFixed(3)}s · ${S.bpm} bpm`);
+    },
+    stop() { S.running = false; clearInterval(S.timer); S.timer = null; },
+    pause() { clearInterval(S.timer); S.timer = null; },
+    resume() { if (S.running && !S.timer) S.timer = setInterval(tick, S.interval); },
+    nextBarStep() { return Math.ceil(S.step / 16) * 16; },
+    setRit(start, factor) { S.rit = { start, factor }; },
+    /* beat phase for the baton: which beat we are on and how far through it */
+    beat(now) {
+      for (let i = S.beats.length - 1; i >= 0; i--) {
+        const b = S.beats[i]; if (b.t <= now) return { idx: b.idx, phase: clamp((now - b.t) / (60 / S.bpm), 0, 1) };
+      }
+      return null;
+    },
+    reset() { this.stop(); S.bpm = 84; S.step = 0; S.startedAt = null; S.beats = []; S.rit = null; }
+  };
+})();
+
+/* ---------------- Layers ---------------- */
+const Layers = (() => {
+  const L = {};
+  ['solo', 'strings', 'winds', 'brass', 'perc'].forEach(n => L[n] = { joined: false, joinStep: 0, lastStep: -1, lastT: 0 });
+  const St = { mode: 'phrase', phase: 0, pendingPhase: null, finalStep: null, rollFrom: null, done: false };
+  const active = (name, step) => L[name].joined && step >= L[name].joinStep;
+  const ev = (t, section, midi, vel, kind) => Visual.queue.push({ t, section, midi, vel, kind });
+  const mark = (name, step, t) => { L[name].lastStep = step; L[name].lastT = t; };
+
+  function onStep(step, t, dur) {
+    if (St.done) return;
+    const pos = step % 16, bar = Math.floor(step / 16), chord = Score.chordAtBar(bar), mpos = step % 32;
+    if (pos === 0 && St.pendingPhase !== null) {
+      St.phase = St.pendingPhase; St.pendingPhase = null;
+      Log.add(`finale phase ${St.phase} from bar ${bar}`); Game.onPhase(St.phase, t);
+    }
+    if (St.finalStep !== null && step === St.finalStep) {
+      finalChord(t); St.done = true; Clock.stop(); Game.onFinalChord(t); return;
+    }
+    const finale = St.mode === 'finale';
+    const mi = Score.melodyStarts.indexOf(mpos);
+
+    if (active('solo', step)) {
+      if (mi >= 0) {
+        const m = Score.melody[mi];
+        Audio.playSolo(m.n, t, 0.75); ev(t, 'solo', m.n, 0.75);
+        if (finale) Audio.playSolo(m.n + 12, t, 0.32);
+      }
+      mark('solo', step, t);
+    }
+    if (active('strings', step)) {
+      if (pos === 0) {
+        chord.tones.forEach(n => Audio.playStrings(n, t, dur * 16, 0.8));
+        Audio.playStringsBass(chord.root, t, dur * 16, 0.9);
+        ev(t, 'strings', chord.tones[0], 0.8);
+      }
+      if (finale && pos === 8) { chord.tones.forEach(n => Audio.playStrings(n + 12, t, dur * 8, 0.45)); ev(t, 'strings', chord.tones[2] + 12, 0.5); }
+      if (St.phase >= 2 && mi >= 0) { const m = Score.melody[mi]; Audio.playStrings(m.n - 12, t, dur * m.len, 0.7); }
+      mark('strings', step, t);
+    }
+    if (active('winds', step)) {
+      const up = [...chord.tones, chord.tones[0] + 12].map(n => n + 12);
+      if (finale) { const seq = [0, 1, 2, 3, 2, 1]; const n = up[seq[pos % 6]]; Audio.playWinds(n, t, dur * 1.15, 0.55); ev(t, 'winds', n, 0.5); }
+      else if (pos % 2 === 0) { const seq = [0, 1, 2, 3, 2, 1, 0, 1]; const n = up[seq[pos / 2]]; Audio.playWinds(n, t, dur * 2.1, 0.62); ev(t, 'winds', n, 0.62); }
+      mark('winds', step, t);
+    }
+    if (active('brass', step)) {
+      if (finale) {
+        const hits = { 0: 6, 6: 2, 8: 4, 12: 4 };
+        if (hits[pos] !== undefined) {
+          const vel = pos === 0 ? 0.85 : 0.62;
+          [chord.root + 12, ...chord.tones].forEach((n, k) => Audio.playBrass(n, t, dur * hits[pos] * 0.9, vel * (k === 0 ? 1 : 0.7)));
+          ev(t, 'brass', chord.tones[0], vel);
+        }
+      } else if (pos === 0 || pos === 8) {
+        const n = chord.root + 12;
+        Audio.playBrass(n, t, dur * 4, 0.55); Audio.playBrass(n + 7, t, dur * 4, 0.4); ev(t, 'brass', n, 0.55);
+      }
+      mark('brass', step, t);
+    }
+    if (St.phase >= 2 && active('perc', step)) {
+      if (pos === 0 || pos === 8) { Audio.playTimpani(chord.root - 12, t, pos === 0 ? 0.9 : 0.6); ev(t, 'perc', chord.root, 0.8); }
+      mark('perc', step, t);
+    }
+    if (St.rollFrom !== null && step >= St.rollFrom && step < St.finalStep) {
+      const k = (step - St.rollFrom) / 8; Audio.playTimpani(38, t, 0.35 + 0.6 * k); ev(t, 'perc', 38, 0.4 + 0.5 * k);
+    }
+  }
+  function finalChord(t) {
+    [62, 66, 69, 74].forEach(n => Audio.playStrings(n, t, 5.2, 0.95)); Audio.playStringsBass(50, t, 5.2, 1);
+    [74, 78, 81, 86].forEach((n, i) => Audio.playWinds(n, t + i * 0.02, 4.4, 0.6));
+    [50, 62, 66, 69].forEach((n, i) => Audio.playBrass(n, t, 4.6, i === 0 ? 1 : 0.75));
+    [74, 78, 81, 86].forEach((n, i) => Audio.playSolo(n, t + i * 0.09, 0.85));
+    Audio.playTimpani(38, t, 1); Audio.playTimpani(38, t + 0.5, 0.5);
+    ev(t, 'solo', 86, 1, 'final'); ev(t, 'strings', 74, 1); ev(t, 'winds', 86, 1); ev(t, 'brass', 69, 1); ev(t, 'perc', 38, 1);
+    Log.add(`final chord at ${t.toFixed(3)}s`);
+  }
+  /* A section joins on the very next scheduler step; strings and brass also fill
+     the rest of the current bar immediately so the gesture is heard at once. */
+  function join(name) {
+    const l = L[name]; if (l.joined) return;
+    l.joined = true; l.joinStep = Clock.step;
+    const ctx = Audio.ctx();
+    if (Clock.running && ctx) {
+      const t = ctx.currentTime + 0.03, step = Clock.step, pos = step % 16, bar = Math.floor(step / 16);
+      const chord = Score.chordAtBar(bar), remaining = (16 - pos) % 16, dur = remaining * Clock.stepDur();
+      if (name === 'strings' && pos !== 0) {
+        chord.tones.forEach(n => Audio.playStrings(n, t, dur, 0.8)); Audio.playStringsBass(chord.root, t, dur, 0.9);
+        ev(t, 'strings', chord.tones[0], 0.8);
+      }
+      if (name === 'brass' && pos % 8 !== 0) {
+        const n = chord.root + 12, d = Math.min(dur, 4 * Clock.stepDur());
+        Audio.playBrass(n, t, d, 0.55); Audio.playBrass(n + 7, t, d, 0.4); ev(t, 'brass', n, 0.55);
+      }
+    }
+    Log.add(`${name} joined at step ${l.joinStep}`);
+  }
+  return {
+    onStep, join, state: St, layers: L,
+    setMode(m) { St.mode = m; },
+    setPhase(p) { St.pendingPhase = p; },
+    resolve() {
+      const start = Clock.nextBarStep();
+      Clock.setRit(start, 0.982); St.rollFrom = start + 8; St.finalStep = start + 16;
+      Log.add(`resolution: ritardando from step ${start}, final chord at step ${St.finalStep}`);
+    },
+    reset() {
+      for (const n in L) Object.assign(L[n], { joined: false, joinStep: 0, lastStep: -1, lastT: 0 });
+      Object.assign(St, { mode: 'phrase', phase: 0, pendingPhase: null, finalStep: null, rollFrom: null, done: false });
+    }
+  };
+})();
+
+/* ---------------- Visual ---------------- */
+const Visual = (() => {
+  const W = 600, H = 600, CX = 300, CY = 395, RY = 0.62;
+  const PIVOT = { x: 300, y: 462 }, BATON = 96;
+  const COL = { strings: [94, 231, 255], winds: [246, 241, 227], brass: [242, 199, 107], solo: [255, 244, 214], perc: [242, 199, 107] };
+  const SEC = { strings: { angle: 150, label: 'Strings' }, winds: { angle: 90, label: 'Woodwinds' }, brass: { angle: 30, label: 'Brass' } };
+  const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${clamp(a, 0, 1)})`;
+  let cv, g, last = 0, reduced = false;
+  const musicians = [];
+  const V = { queue: [], rings: [], parts: [], trail: [], solo: { x: 300, y: 319, lit: 0 }, flick: 0, batonAngle: -Math.PI / 2,
+              focus: null, joined: {}, intensity: {}, energy: 0, chapter: 0, burst: 0, finished: false, sectionPulse: {} };
+  const pos = (deg, r) => { const a = deg * Math.PI / 180; return [CX + r * Math.cos(a), CY - r * RY * Math.sin(a)]; };
+
+  function init(canvas) {
+    cv = canvas; g = cv.getContext('2d');
+    reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    for (const [name, s] of Object.entries(SEC)) {
+      [-18, -6, 6, 18].forEach(d => { const [x, y] = pos(s.angle + d, 222); musicians.push({ x, y, section: name, lit: 0, seed: Math.random() }); });
+      [-11, 0, 11].forEach(d => { const [x, y] = pos(s.angle + d, 176); musicians.push({ x, y, section: name, lit: 0, seed: Math.random() }); });
+    }
+    const [sx, sy] = pos(90, 122); V.solo.x = sx; V.solo.y = sy;
+    requestAnimationFrame(frame);
+  }
+  function ring(x, y, color, speed = 1, width = 1.5) { V.rings.push({ x, y, r: 6, a: 0.9, color, speed, width }); }
+  function spawn(x, y, color, n, spread = 1, up = 1) {
+    if (reduced) n = Math.ceil(n / 3);
+    for (let i = 0; i < n; i++) {
+      const ang = -Math.PI / 2 + (Math.random() - 0.5) * 1.6 * spread;
+      const sp = 28 + Math.random() * 70;
+      V.parts.push({ x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp * up, life: 0.7 + Math.random() * 0.7, age: 0, color, w: 1 + Math.random() * 1.2 });
+      if (V.parts.length > 220) V.parts.shift();
+    }
+  }
+  function trigger(e) {
+    const color = COL[e.section] || COL.solo;
+    if (e.kind === 'final') { V.burst = 1; V.finished = true; ring(V.solo.x, V.solo.y, COL.brass, 1.6, 3); ring(V.solo.x, V.solo.y, COL.solo, 1.1, 2); spawn(V.solo.x, V.solo.y, COL.brass, 90, 2.2); }
+    if (e.section === 'solo') {
+      V.solo.lit = 1; V.flick = 1; spawn(V.solo.x, V.solo.y - 10, color, 4, 0.8);
+      return;
+    }
+    if (e.section === 'perc') { V.sectionPulse.brass = 1; V.sectionPulse.strings = 1; V.sectionPulse.winds = 1; return; }
+    const ms = musicians.filter(m => m.section === e.section);
+    ms.forEach(m => { if (Math.random() < 0.45 + e.vel * 0.5) m.lit = Math.max(m.lit, 0.55 + 0.45 * e.vel * (0.6 + Math.random() * 0.4)); });
+    V.sectionPulse[e.section] = 1;
+    const src = ms[(Math.random() * ms.length) | 0];
+    spawn(src.x, src.y - 8, color, 2 + Math.round(e.vel * 3), 0.7);
+  }
+  function update(dt, now) {
+    for (const m of musicians) m.lit = Math.max(0, m.lit - dt * 1.7);
+    V.solo.lit = Math.max(0, V.solo.lit - dt * 1.1);
+    V.flick = Math.max(0, V.flick - dt * 1.4);
+    V.burst = Math.max(0, V.burst - dt * 0.35);
+    for (const k in V.sectionPulse) V.sectionPulse[k] = Math.max(0, V.sectionPulse[k] - dt * 2.2);
+    V.rings = V.rings.filter(r => { r.r += dt * 210 * r.speed; r.a -= dt * 0.9 * r.speed; return r.a > 0; });
+    V.parts = V.parts.filter(p => { p.age += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy -= 12 * dt; return p.age < p.life; });
+    /* baton */
+    let target;
+    const b = Clock.running ? Clock.beat(now) : null;
+    if (b) { const phi = b.idx + b.phase; target = -Math.PI / 2 + 0.5 * Math.sin(phi * Math.PI) * (0.75 + 0.5 * V.energy); }
+    else { target = -Math.PI / 2 + Math.sin(now * 1.3 + performance.now() / 1400) * 0.035 - V.flick * 0.5 * Math.sin(V.flick * Math.PI); }
+    V.batonAngle += (target - V.batonAngle) * Math.min(1, dt * 14);
+    const tip = { x: PIVOT.x + Math.cos(V.batonAngle) * BATON, y: PIVOT.y + Math.sin(V.batonAngle) * BATON };
+    V.trail.push(tip); if (V.trail.length > 14) V.trail.shift();
+  }
+  function glyph(m, color, a) {
+    if (a <= 0.02) return;
+    g.strokeStyle = rgba(color, a); g.fillStyle = rgba(color, a); g.lineWidth = 1.4; g.lineCap = 'round';
+    g.beginPath(); g.ellipse(m.x, m.y, 3.2, 7, 0, 0, TAU); g.fill();
+    g.beginPath(); g.arc(m.x, m.y - 11.5, 2.7, 0, TAU); g.fill();
+    g.beginPath();
+    if (m.section === 'strings') { g.moveTo(m.x + 3, m.y + 5); g.lineTo(m.x + 10, m.y - 7); }
+    else if (m.section === 'winds') { g.moveTo(m.x + 4.5, m.y - 5); g.lineTo(m.x + 4.5, m.y + 7); }
+    else { g.moveTo(m.x + 3, m.y - 1); g.lineTo(m.x + 7, m.y - 3); g.arc(m.x + 9, m.y - 3, 2.6, Math.PI, TAU + Math.PI, true); }
+    g.stroke();
+  }
+  function halo(x, y, r, color, a) {
+    if (a <= 0.01) return;
+    const gr = g.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, rgba(color, a)); gr.addColorStop(1, rgba(color, 0));
+    g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+  }
+  function dynamicMark(v) { return v < 0.14 ? 'pp' : v < 0.29 ? 'p' : v < 0.43 ? 'mp' : v < 0.57 ? 'mf' : v < 0.71 ? 'f' : v < 0.86 ? 'ff' : 'fff'; }
+  function draw(now) {
+    const ts = performance.now() / 1000;
+    g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+    /* stage floor */
+    g.strokeStyle = rgba(COL.strings, 0.07 + V.energy * 0.22); g.lineWidth = 1;
+    g.beginPath(); g.ellipse(CX, CY, 252, 252 * RY, 0, Math.PI * 1.04, Math.PI * 1.96); g.stroke();
+    g.strokeStyle = rgba(COL.winds, 0.04 + V.energy * 0.1);
+    g.beginPath(); g.ellipse(CX, CY, 150, 150 * RY, 0, Math.PI * 1.02, Math.PI * 1.98); g.stroke();
+    /* focus cursor */
+    if (V.focus) {
+      const s = SEC[V.focus], a0 = (s.angle - 26) * Math.PI / 180, a1 = (s.angle + 26) * Math.PI / 180;
+      const pulse = 0.55 + 0.35 * Math.sin(ts * 3.2);
+      g.strokeStyle = rgba(COL.strings, pulse); g.lineWidth = 2.5; g.lineCap = 'round';
+      g.beginPath(); g.ellipse(CX, CY, 152, 152 * RY, 0, -a1, -a0); g.stroke();
+      const [gx, gy] = pos(s.angle, 200); halo(gx, gy, 70, COL.strings, 0.05 + 0.04 * pulse);
+    }
+    /* musicians */
+    for (const m of musicians) {
+      const color = COL[m.section]; const joined = !!V.joined[m.section]; const inten = V.intensity[m.section] ?? 0.5;
+      let base = joined ? 0.3 + 0.5 * inten : 0.13 + 0.03 * Math.sin(ts * 1.1 + m.seed * 6);
+      if (V.focus === m.section) base += 0.1;
+      const a = base + m.lit * (1 - base);
+      halo(m.x, m.y - 3, 14 + m.lit * 12 + (joined ? inten * 6 : 0), color, (joined ? 0.16 + inten * 0.2 : 0.04) + m.lit * 0.45);
+      glyph(m, color, a);
+    }
+    /* section labels */
+    for (const [name, s] of Object.entries(SEC)) {
+      const joined = !!V.joined[name], focused = V.focus === name;
+      if (!joined && !focused) continue;
+      const [lx, ly] = pos(s.angle, 270); const color = COL[name];
+      const pulse = V.sectionPulse[name] || 0;
+      g.font = '500 12px Manrope, system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      try { g.letterSpacing = '2.5px'; } catch (_) {}
+      g.fillStyle = rgba(color, (focused ? 0.95 : 0.55) + pulse * 0.3);
+      g.fillText(s.label.toUpperCase(), lx, ly);
+      if (joined && V.chapter >= 3) {
+        try { g.letterSpacing = '0px'; } catch (_) {}
+        g.font = 'italic 500 17px "Cormorant Garamond", Georgia, serif'; g.fillStyle = rgba(COL.brass, focused ? 0.95 : 0.6);
+        g.fillText(dynamicMark(V.intensity[name] ?? 0.5), lx, ly + 18);
+      }
+    }
+    try { g.letterSpacing = '0px'; } catch (_) {}
+    /* soloist */
+    {
+      const s = V.solo, awake = V.chapter >= 1; const c = COL.solo;
+      const a = awake ? 0.5 + 0.5 * s.lit : 0.14 + 0.05 * Math.sin(ts * 1.6);
+      halo(s.x, s.y - 4, 20 + s.lit * 30, COL.brass, (awake ? 0.14 : 0.05) + s.lit * 0.55);
+      g.strokeStyle = rgba(c, a); g.fillStyle = rgba(c, a); g.lineWidth = 1.5; g.lineCap = 'round';
+      g.beginPath(); g.ellipse(s.x, s.y, 3.6, 8, 0, 0, TAU); g.fill();
+      g.beginPath(); g.arc(s.x, s.y - 13, 3, 0, TAU); g.fill();
+      g.beginPath();
+      for (let i = 0; i < 3; i++) { g.moveTo(s.x + 6 + i * 3.2, s.y - 10 + i * 2); g.lineTo(s.x + 6 + i * 3.2, s.y + 7); }
+      g.moveTo(s.x + 5, s.y - 12); g.quadraticCurveTo(s.x + 14, s.y - 16, s.x + 13, s.y - 5); g.stroke();
+    }
+    /* rings */
+    for (const r of V.rings) { g.strokeStyle = rgba(r.color, r.a); g.lineWidth = r.width; g.beginPath(); g.arc(r.x, r.y, r.r, 0, TAU); g.stroke(); }
+    /* particles / light trails */
+    g.lineCap = 'round';
+    for (const p of V.parts) {
+      const k = 1 - p.age / p.life; g.strokeStyle = rgba(p.color, k * 0.9); g.lineWidth = p.w * k;
+      g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(p.x - p.vx * 0.09, p.y - p.vy * 0.09); g.stroke();
+    }
+    /* energy arc */
+    {
+      const r = 112, a0 = Math.PI, a1 = TAU;
+      g.strokeStyle = rgba(COL.winds, 0.09); g.lineWidth = 1.5;
+      g.beginPath(); g.arc(PIVOT.x, PIVOT.y, r, a0, a1); g.stroke();
+      if (V.energy > 0.005) {
+        const grad = g.createLinearGradient(PIVOT.x - r, 0, PIVOT.x + r, 0);
+        grad.addColorStop(0, rgba(COL.strings, 0.9)); grad.addColorStop(1, rgba(COL.brass, 0.9));
+        g.strokeStyle = grad; g.lineWidth = 2.5;
+        g.beginPath(); g.arc(PIVOT.x, PIVOT.y, r, a0, a0 + Math.PI * clamp(V.energy, 0, 1)); g.stroke();
+      }
+    }
+    /* baton with light trail */
+    {
+      const awake = V.chapter >= 1; const n = V.trail.length;
+      for (let i = 1; i < n; i++) {
+        const k = i / n; g.strokeStyle = rgba(COL.strings, k * (0.08 + V.energy * 0.35)); g.lineWidth = 1 + k * 2;
+        g.beginPath(); g.moveTo(V.trail[i - 1].x, V.trail[i - 1].y); g.lineTo(V.trail[i].x, V.trail[i].y); g.stroke();
+      }
+      const tip = V.trail[n - 1] || { x: PIVOT.x, y: PIVOT.y - BATON };
+      const grad = g.createLinearGradient(PIVOT.x, PIVOT.y, tip.x, tip.y);
+      grad.addColorStop(0, rgba(COL.winds, awake ? 0.35 : 0.18)); grad.addColorStop(1, rgba(COL.winds, awake ? 0.95 : 0.4));
+      g.strokeStyle = grad; g.lineWidth = 2.4; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(PIVOT.x, PIVOT.y); g.lineTo(tip.x, tip.y); g.stroke();
+      halo(tip.x, tip.y, 10 + V.energy * 10 + V.flick * 14, COL.winds, (awake ? 0.35 : 0.12) + V.flick * 0.5);
+      g.fillStyle = rgba(COL.brass, awake ? 0.8 : 0.35); g.beginPath(); g.arc(PIVOT.x, PIVOT.y, 3, 0, TAU); g.fill();
+    }
+    /* chapter progression */
+    for (let i = 0; i < 5; i++) {
+      const x = 300 + (i - 2) * 14, y = 52; const ch = i + 1;
+      let color = COL.winds, a = 0.22, r = 2;
+      if (ch < V.chapter || V.finished) { color = COL.brass; a = 0.85; }
+      else if (ch === V.chapter) { color = COL.strings; a = 0.6 + 0.4 * Math.sin(ts * 3); r = 2.6; }
+      g.fillStyle = rgba(color, a); g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+    }
+    /* completion glow */
+    if (V.burst > 0) halo(V.solo.x, V.solo.y, 40 + (1 - V.burst) * 420, COL.brass, V.burst * 0.35);
+  }
+  function frame(ts) {
+    requestAnimationFrame(frame);
+    const dt = clamp((ts - last) / 1000 || 0.016, 0.001, 0.05); last = ts;
+    const ctx = Audio.ctx(); const now = ctx ? ctx.currentTime : 0;
+    if (ctx) { const q = V.queue; let i = 0; while (i < q.length) { if (q[i].t <= now + 0.012) { trigger(q[i]); q.splice(i, 1); } else i++; } }
+    update(dt, now); draw(now);
+  }
+  return {
+    init, ring, spawn, state: V, queue: V.queue, COL,
+    cue(color = COL.solo) { ring(V.solo.x, V.solo.y, color); },
+    reset() { V.queue.length = 0; V.rings = []; V.parts = []; V.solo.lit = 0; V.flick = 0; V.focus = null; V.joined = {}; V.intensity = {}; V.energy = 0; V.chapter = 0; V.burst = 0; V.finished = false; V.sectionPulse = {}; for (const m of musicians) m.lit = 0; }
+  };
+})();
+
+/* ---------------- Input ---------------- */
+/* Glasses deliver pinch → Enter, d-pad swipes → Arrow keys, back → Escape.
+   Space is a desktop-only alias for Enter. Key auto-repeat and duplicate keydowns
+   are ignored; the same action cannot fire twice within 80 ms. */
+const Input = (() => {
+  const MAP = { Enter: 'select', ' ': 'select', ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Escape: 'back' };
+  const held = new Set(), last = {}, listeners = [], MIN_GAP = 80;
+  const I = { dragEnabled: false, dragThreshold: 8 };
+  function emit(action, src, data) {
+    const now = performance.now();
+    if (action !== 'drag' && last[action] && now - last[action] < MIN_GAP) { Log.add(`ignored rapid ${action}`); return; }
+    last[action] = now; listeners.forEach(fn => fn(action, src, data));
+  }
+  function onKey(e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === 'd' || e.key === 'D') { Dev.toggle(); e.preventDefault(); return; }
+    const a = MAP[e.key]; if (!a) return;
+    e.preventDefault();
+    if (e.repeat) return;
+    if (held.has(e.key)) return;
+    held.add(e.key); setTimeout(() => held.delete(e.key), 700);
+    emit(a, 'key');
+  }
+  let drag = null;
+  function onDown(e) { if (!I.dragEnabled || e.button > 0) return; drag = { id: e.pointerId, x0: e.clientX, x: e.clientX, moved: false }; try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {} }
+  function onMove(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (!drag.moved) { if (Math.abs(e.clientX - drag.x0) < I.dragThreshold) return; drag.moved = true; drag.x = e.clientX; emit('dragstart', 'pointer'); return; }
+    const dx = e.clientX - drag.x; drag.x = e.clientX; if (dx !== 0) emit('drag', 'pointer', dx);
+  }
+  function onUp(e) { if (!drag || e.pointerId !== drag.id) return; if (drag.moved) emit('dragend', 'pointer'); drag = null; }
+  return {
+    on(fn) { listeners.push(fn); }, get dragEnabled() { return I.dragEnabled; }, set dragEnabled(v) { I.dragEnabled = v; },
+    init(el) {
+      window.addEventListener('keydown', onKey); window.addEventListener('keyup', e => held.delete(e.key));
+      window.addEventListener('blur', () => held.clear());
+      el.addEventListener('pointerdown', onDown); el.addEventListener('pointermove', onMove);
+      el.addEventListener('pointerup', onUp); el.addEventListener('pointercancel', onUp);
+    },
+    /* programmatic entry point used by tests; goes through the same guards */
+    dispatch(action, data) { emit(action, 'api', data); }
+  };
+})();
+
+/* ---------------- Game ---------------- */
+const Game = (() => {
+  const SECTIONS = ['strings', 'winds', 'brass'];
+  const NAME = { strings: 'strings', winds: 'woodwinds', brass: 'brass' };
+  const CH = [
+    { eyebrow: 'Overture',                          legend: ['Pinch'] },
+    { eyebrow: 'Chapter I · The First Note',        legend: ['Pinch · next note'] },
+    { eyebrow: 'Chapter II · Find Your Orchestra',  legend: ['◀ ▶ Choose a section', 'Pinch · bring it in'] },
+    { eyebrow: 'Chapter III · Shape the Music',     legend: ['◀ ▶ Section', '▲ ▼ Dynamics'] },
+    { eyebrow: 'Chapter IV · Conduct the Tempo',    legend: ['▲ ▼ Tempo', 'Pinch & drag · sweep the tempo'] },
+    { eyebrow: 'Chapter V · The Finale',            legend: ['Pinch · cue', '◀ ▶ Section', '▲ ▼ Dynamics'] }
+  ];
+  const G = { chapter: 0, focus: 0, melodyIndex: 0, joined: {}, intensity: { strings: 0.5, winds: 0.5, brass: 0.5 },
+              finalePhase: 0, confirm: false, ended: false, timers: [], prevPrompt: '', challengeDone: false, cued: false };
+  const el = { eyebrow: $('#eyebrow'), prompt: $('#prompt'), legend: $('#legend'), readout: $('#readout'), wordmark: $('#wordmark'), tagline: $('#tagline'), bravo: $('#bravo') };
+  const later = (fn, ms) => { const id = setTimeout(fn, ms); G.timers.push(id); };
+  const clearTimers = () => { G.timers.forEach(clearTimeout); G.timers = []; };
+  const focusName = () => SECTIONS[G.focus];
+  const tempoMark = bpm => bpm < 72 ? 'Adagio' : bpm < 92 ? 'Andante' : bpm < 108 ? 'Moderato' : bpm < 130 ? 'Allegro' : 'Vivace';
+
+  function prompt(html, instant) {
+    if (instant) { el.prompt.classList.remove('swap'); el.prompt.innerHTML = html; return; }
+    el.prompt.classList.add('swap');
+    later(() => { el.prompt.innerHTML = html; el.prompt.classList.remove('swap'); }, 220);
+  }
+  function legend(items) { el.legend.innerHTML = items.map(s => `<span>${s}</span>`).join(''); }
+  function readout() {
+    if (G.chapter < 2) { el.readout.innerHTML = ''; return; }
+    const parts = [`♩ <b>${Math.round(Clock.bpm)}</b> ${tempoMark(Clock.bpm)}`];
+    el.readout.innerHTML = parts.join('');
+  }
+  function energy() {
+    const joined = SECTIONS.filter(s => G.joined[s]);
+    const e = joined.length ? joined.reduce((a, s) => a + G.intensity[s], 0) / SECTIONS.length : 0;
+    Visual.state.energy = clamp(0.08 * (G.chapter >= 1 ? 1 : 0) + e * 0.75 + (Clock.bpm - 84) / 56 * 0.15 + (G.finalePhase >= 2 ? 0.1 : 0), 0, 1);
+    return joined.length ? joined.reduce((a, s) => a + G.intensity[s], 0) / joined.length : 0;
+  }
+  function syncVisual() {
+    Visual.state.chapter = G.chapter; Visual.state.joined = { ...G.joined }; Visual.state.intensity = { ...G.intensity };
+    Visual.state.focus = G.chapter >= 2 && !G.ended ? focusName() : null; energy(); readout();
+  }
+  function enter(n) {
+    G.chapter = n; el.eyebrow.textContent = CH[n].eyebrow; legend(CH[n].legend);
+    Input.dragEnabled = n >= 4; syncVisual(); Log.add(`→ ${CH[n].eyebrow}`);
+  }
+
+  /* ---- Chapter 1: one gesture, one note ---- */
+  function playMelodyNote() {
+    const ctx = Audio.ensure(); if (!ctx) return;
+    const m = Score.melody[G.melodyIndex]; const t = ctx.currentTime + 0.01;
+    Audio.playSolo(m.n, t, 0.85); Audio.stats.userNotes++;
+    Visual.queue.push({ t, section: 'solo', midi: m.n, vel: 0.9 }); Visual.cue();
+    Log.add(`user note ${G.melodyIndex + 1}/8 (midi ${m.n}) at ${t.toFixed(3)}s`);
+    G.melodyIndex++;
+  }
+  function firstCue() {
+    el.wordmark.classList.add('gone'); el.tagline.classList.add('gone');
+    playMelodyNote(); enter(1);
+    prompt('Pinch again.<br>Each cue adds the next note.');
+  }
+  function melodyComplete() {
+    const ctx = Audio.ctx(); const at = ctx.currentTime + 0.55;
+    Layers.layers.solo.joined = true; Layers.layers.solo.joinStep = 0;
+    Clock.start(at);
+    prompt('That melody is yours.<br>Listen — it plays on.');
+    later(() => enter2(), 5200);
+  }
+  /* ---- Chapter 2 ---- */
+  function enter2() {
+    enter(2); G.focus = 0; syncVisual();
+    prompt('Swipe left or right to find a section.<br>Pinch to bring it in.');
+  }
+  function moveFocus(dir) {
+    G.focus = (G.focus + dir + SECTIONS.length) % SECTIONS.length; syncVisual();
+    Log.add(`focus → ${focusName()}`);
+  }
+  function joinFocused() {
+    const s = focusName();
+    if (G.joined[s]) { Visual.cue(Visual.COL[s]); return; }
+    G.joined[s] = true; Audio.setIntensity(s, G.intensity[s]); Layers.join(s);
+    Visual.cue(Visual.COL[s]); syncVisual();
+    const count = SECTIONS.filter(x => G.joined[x]).length;
+    if (count === SECTIONS.length) {
+      prompt('Your orchestra is complete.');
+      later(() => enter3(), 3600);
+    } else {
+      const left = SECTIONS.filter(x => !G.joined[x]).map(x => NAME[x]);
+      prompt(`The ${NAME[s]} have joined.<br>${count === 1 ? 'Two sections' : 'One section'} still waiting: <em>${left.join(' and ')}</em>.`);
+    }
+  }
+  /* ---- Chapter 3 ---- */
+  function enter3() {
+    enter(3); G.challengeDone = false; G.focus = 0; syncVisual();
+    prompt('Swipe up to raise the <em>strings</em>.<br>Build the crescendo, step by step.');
+  }
+  function adjustIntensity(dir) {
+    const s = focusName(); if (!G.joined[s]) return;
+    const v = clamp(Math.round((G.intensity[s] + dir * 0.125) * 1000) / 1000, 0, 1);
+    if (v === G.intensity[s]) { Visual.cue(Visual.COL[s]); return; }
+    G.intensity[s] = v; Audio.setIntensity(s, v); Visual.cue(Visual.COL[s]);
+    Visual.state.sectionPulse[s] = 1; syncVisual();
+    Log.add(`${s} intensity → ${v.toFixed(3)}`);
+    if (G.chapter === 3 && !G.challengeDone) {
+      const e = energy();
+      if (e >= 0.78) {
+        G.challengeDone = true; prompt('<em>Fortissimo.</em> The hall is full.');
+        later(() => enter4(), 3400);
+      } else if (v >= 0.99) {
+        const next = SECTIONS.find(x => G.intensity[x] < 0.9);
+        if (next) prompt(`Now the <em>${NAME[next]}</em>.<br>Swipe ${SECTIONS.indexOf(next) > G.focus ? 'right' : 'left'} to find them, then up.`);
+      }
+    }
+  }
+  /* ---- Chapter 4 ---- */
+  function enter4() {
+    enter(4); G.challengeDone = false; syncVisual();
+    prompt('Swipe up to quicken the tempo.<br>Bring the orchestra to <em>Allegro</em>.');
+  }
+  function setTempo(v, silent) {
+    const before = Clock.bpm; Clock.bpm = v;
+    if (Clock.bpm !== before) { syncVisual(); if (!silent) Log.add(`tempo → ${Clock.bpm.toFixed(1)} bpm`); }
+    if (G.chapter === 4 && !G.challengeDone && Clock.bpm >= 108) {
+      G.challengeDone = true; prompt('<em>Allegro.</em> Your orchestra follows every move.');
+      later(() => enter5(), 3400);
+    }
+  }
+  /* ---- Chapter 5 ---- */
+  function enter5() {
+    enter(5); G.finalePhase = 1; G.cued = false; Layers.setMode('finale'); Layers.setPhase(1); syncVisual();
+    prompt('The finale begins.<br>Pinch to cue the full orchestra.');
+  }
+  function cueFinale() {
+    if (G.cued) return; G.cued = true;
+    G.joined.perc = true; Layers.join('perc'); Layers.setPhase(2); Visual.cue(Visual.COL.brass);
+    prompt('The orchestra gathers…');
+  }
+  function onPhase(p, t) {
+    G.finalePhase = p; syncVisual();
+    if (p === 2) { later(() => { prompt('Everything you learned, in one movement.<br>Pinch to bring it home.'); G.cued = false; G.resolveReady = true; }, 900); }
+  }
+  function resolve() {
+    if (!G.resolveReady) return; G.resolveReady = false; G.cued = true;
+    Layers.resolve(); Visual.cue(Visual.COL.solo); prompt('');
+  }
+  function onFinalChord(t) {
+    const ctx = Audio.ctx(); const delay = Math.max(0, (t - ctx.currentTime) * 1000);
+    later(() => {
+      el.bravo.classList.add('show'); G.ended = true; syncVisual(); Log.add('performance complete');
+      later(() => { el.bravo.classList.remove('show'); prompt('Your first note became a whole orchestra.<br>Pinch to conduct again.'); legend(['Pinch · conduct again']); }, 4200);
+    }, delay + 60);
+  }
+  /* ---- restart ---- */
+  function reset() {
+    clearTimers(); Clock.reset(); Audio.shutdown(); Layers.reset(); Visual.reset();
+    Object.assign(G, { chapter: 0, focus: 0, melodyIndex: 0, joined: {}, intensity: { strings: 0.5, winds: 0.5, brass: 0.5 },
+                       finalePhase: 0, confirm: false, ended: false, challengeDone: false, cued: false, resolveReady: false });
+    el.bravo.classList.remove('show'); el.wordmark.classList.remove('gone'); el.tagline.classList.remove('gone');
+    enter(0); prompt('Your orchestra is waiting.<br>Pinch once to give your first cue.', true);
+    Log.add('restarted — silent until the next pinch');
+  }
+  function askRestart() {
+    G.confirm = true; G.prevPrompt = el.prompt.innerHTML; G.prevLegend = el.legend.innerHTML;
+    prompt('Start over?<br>Pinch to confirm · swipe back to keep playing', true); legend(['Pinch · restart', 'Back · cancel']);
+  }
+  function cancelRestart() { G.confirm = false; el.prompt.innerHTML = G.prevPrompt; el.legend.innerHTML = G.prevLegend; }
+
+  function onAction(a, src, data) {
+    if (G.confirm) { if (a === 'select') reset(); else if (a === 'back') cancelRestart(); return; }
+    if (a === 'back') { if (G.chapter >= 1 && !G.ended) askRestart(); return; }
+    if (G.ended) { if (a === 'select') reset(); return; }
+    switch (G.chapter) {
+      case 0: if (a === 'select') firstCue(); break;
+      case 1:
+        if (a === 'select') {
+          if (G.melodyIndex < Score.melody.length) { playMelodyNote(); if (G.melodyIndex === Score.melody.length) melodyComplete(); }
+        }
+        break;
+      case 2:
+        if (a === 'left') moveFocus(-1); else if (a === 'right') moveFocus(1); else if (a === 'select') joinFocused();
+        break;
+      case 3:
+        if (a === 'left') moveFocus(-1); else if (a === 'right') moveFocus(1);
+        else if (a === 'up') adjustIntensity(1); else if (a === 'down') adjustIntensity(-1);
+        else if (a === 'select') Visual.cue(Visual.COL[focusName()]);
+        break;
+      case 4:
+        if (a === 'up') setTempo(Clock.bpm + 4); else if (a === 'down') setTempo(Clock.bpm - 4);
+        else if (a === 'drag') setTempo(Clock.bpm + data * 0.22, true); else if (a === 'dragend') Log.add(`drag ended · ${Clock.bpm.toFixed(1)} bpm`);
+        else if (a === 'left') moveFocus(-1); else if (a === 'right') moveFocus(1);
+        break;
+      case 5:
+        if (a === 'select') { if (G.resolveReady) resolve(); else cueFinale(); }
+        else if (a === 'left') moveFocus(-1); else if (a === 'right') moveFocus(1);
+        else if (a === 'up') adjustIntensity(1); else if (a === 'down') adjustIntensity(-1);
+        else if (a === 'drag') setTempo(Clock.bpm + data * 0.22, true);
+        break;
+    }
+  }
+  return {
+    state: G, onPhase, onFinalChord, reset,
+    start() {
+      Visual.init($('#c')); Input.init($('#stage')); Input.on(onAction); enter(0);
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) { Clock.pause(); Audio.suspend(); }
+        else { Audio.resume(); Clock.resume(); }
+      });
+      window.addEventListener('pagehide', () => { Clock.stop(); Audio.shutdown(); });
+      $('#stage').focus({ preventScroll: true });
+      Log.add('ready · silent · waiting for the first pinch');
+    }
+  };
+})();
+
+/* ---------------- Dev overlay ---------------- */
+const Dev = (() => {
+  const box = $('#dev'); let on = false, timer = null;
+  function render() {
+    const ctx = Audio.ctx(); const L = Layers.layers; const G = Game.state;
+    const lines = [];
+    lines.push(`<h4>Audio</h4>`);
+    lines.push(ctx ? `context: ${ctx.state} · ${ctx.sampleRate} Hz\nnow: ${ctx.currentTime.toFixed(3)}s` : 'context: none (created on first pinch)');
+    lines.push(`user-triggered notes: ${Audio.stats.userNotes}\nscheduled voices: ${Audio.stats.scheduledNotes}`);
+    lines.push(`<h4>Clock</h4>`);
+    lines.push(Clock.running ? `running · ${Clock.bpm.toFixed(1)} bpm\nstep ${Clock.step} · bar ${Math.floor(Clock.step / 16)} · pos ${Clock.step % 16}\nstep = ${(Clock.stepDur() * 1000).toFixed(1)} ms` : 'stopped');
+    lines.push(`<h4>Layers (same step → same time)</h4>`);
+    for (const [n, l] of Object.entries(L)) {
+      lines.push(`${n.padEnd(8)} ${l.joined ? 'on ' : 'off'} join@${String(l.joinStep).padStart(4)} last ${String(l.lastStep).padStart(4)} @${l.lastT.toFixed(3)}`);
+    }
+    const lastSteps = Object.values(L).filter(l => l.joined && l.lastStep >= 0);
+    if (lastSteps.length > 1) {
+      const maxStep = Math.max(...lastSteps.map(l => l.lastStep));
+      const ok = lastSteps.every(l => maxStep - l.lastStep <= 16);
+      lines.push(`sync: ${ok ? 'all layers within one bar of the head' : 'DRIFT'}`);
+    }
+    lines.push(`<h4>Game</h4>chapter ${G.chapter} · focus ${['strings', 'winds', 'brass'][G.focus]} · melody ${G.melodyIndex}/8\nintensity S ${G.intensity.strings.toFixed(2)} W ${G.intensity.winds.toFixed(2)} B ${G.intensity.brass.toFixed(2)}`);
+    lines.push(`<h4>Log</h4>` + Log.lines.slice(-14).join('\n'));
+    box.innerHTML = lines.join('\n');
+  }
+  return {
+    dirty: false,
+    toggle(force) { on = force === undefined ? !on : force; box.hidden = !on; clearInterval(timer); if (on) { render(); timer = setInterval(render, 200); } },
+    get on() { return on; }
+  };
+})();
+
+Game.start();
+if (location.hash === '#dev') Dev.toggle(true);
+window.CONDUCTOR = { Audio, Clock, Layers, Visual, Input, Game, Log, Score, Dev, version: '0.1.0' };
+</script>
+</body>
+</html>
