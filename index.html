@@ -6,7 +6,7 @@
 <title>CONDUCTOR</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Manrope:wght@400;500;600&display=swap">
 <style>
-/* CONDUCTOR — gesture tutorial for Meta Ray-Ban Display.
+/* CONDUCTOR v0.2 — gesture tutorial for Meta Ray-Ban Display.
    Single-theme by design: the glasses display is additive, so pure black is transparent. */
 :root{
   --ink:#000000;
@@ -26,26 +26,38 @@ body{font-family:var(--ui);display:flex;align-items:center;justify-content:cente
 #c{position:absolute;inset:0;width:600px;height:600px;display:block}
 #ui{position:absolute;inset:0;pointer-events:none}
 #ui > *{position:absolute;left:0;right:0;text-align:center}
-#eyebrow{top:26px;font:500 11px/1 var(--ui);letter-spacing:0.22em;text-transform:uppercase;color:var(--cyan);opacity:0.85;transition:opacity .5s}
+#eyebrow{top:26px;font:500 11px/1 var(--ui);letter-spacing:0.22em;text-transform:uppercase;color:var(--cyan);opacity:0.85}
 #wordmark{top:96px;font:500 34px/1 var(--display);letter-spacing:0.34em;text-transform:uppercase;color:var(--ivory);text-indent:0.34em}
 #tagline{top:142px;font:italic 400 16px/1.3 var(--display);color:var(--dim);letter-spacing:0.02em}
 #wordmark,#tagline{transition:opacity .9s ease}
 .gone{opacity:0!important}
-#prompt{bottom:52px;padding:0 48px;font:500 24px/1.25 var(--display);color:var(--ivory);text-wrap:balance;
+#prompt{bottom:68px;padding:0 44px;font:500 23px/1.25 var(--display);color:var(--ivory);text-wrap:balance;
   text-shadow:0 0 18px rgba(246,241,227,0.35);transition:opacity .35s ease,transform .35s ease}
 #prompt.swap{opacity:0;transform:translateY(4px)}
 #prompt em{font-style:italic;color:var(--gold)}
-#legend{bottom:18px;font:500 11px/1 var(--ui);letter-spacing:0.14em;text-transform:uppercase;color:rgba(94,231,255,0.72)}
-#legend span{margin:0 9px;white-space:nowrap}
-#readout{top:24px;right:22px;left:auto;text-align:right;font:500 12px/1.2 var(--ui);letter-spacing:0.08em;color:var(--dim);font-variant-numeric:tabular-nums}
+#readout{top:24px;right:22px;left:auto!important;text-align:right;font:500 12px/1.2 var(--ui);letter-spacing:0.08em;color:var(--dim);font-variant-numeric:tabular-nums}
 #readout b{font-weight:600;color:var(--ivory)}
 #bravo{top:100px;font:italic 500 64px/1 var(--display);color:var(--gold);letter-spacing:0.04em;
   text-shadow:0 0 28px rgba(242,199,107,0.6);opacity:0;transform:scale(0.92);transition:opacity 1.2s ease,transform 1.2s ease}
 #bravo.show{opacity:1;transform:scale(1)}
-#dev{position:absolute;top:0;right:0;width:236px;max-height:600px;overflow:hidden;padding:10px 12px;box-sizing:border-box;
-  background:rgba(0,0,0,0.78);border-left:1px solid rgba(94,231,255,0.3);color:#cfe;font:11px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;pointer-events:none}
+/* popups: outline only — the canvas dims the stage behind them, so no opaque panel is needed */
+.pop{left:150px!important;right:150px!important;border:1px solid rgba(94,231,255,0.55);border-radius:16px;
+  box-shadow:0 0 24px rgba(94,231,255,0.18),inset 0 0 24px rgba(94,231,255,0.08);padding:16px 18px;box-sizing:border-box;
+  opacity:0;transform:scale(0.96);transition:opacity .3s ease,transform .3s ease}
+.pop.show{opacity:1;transform:scale(1)}
+.pop .k{font:600 11px/1 var(--ui);letter-spacing:0.22em;text-transform:uppercase;color:var(--cyan)}
+.pop .t{margin-top:10px;font:500 26px/1.1 var(--display);color:var(--ivory)}
+.pop .b{margin-top:8px;font:500 13px/1.35 var(--ui);color:var(--dim)}
+#card{top:70px}
+#pause{top:176px;height:220px}
+#pause .row{position:absolute;left:92px;right:10px;text-align:left;font:500 15px/1.2 var(--ui);color:var(--dim)}
+#pause .row b{display:block;font:500 22px/1.1 var(--display);color:var(--ivory)}
+#pause .r1{top:84px}
+#pause .r2{top:148px}
+#dev{position:absolute;top:0;right:0;width:250px;max-height:600px;overflow:hidden;padding:10px 12px;box-sizing:border-box;
+  background:rgba(0,0,0,0.8);border-left:1px solid rgba(94,231,255,0.3);color:#cfe;font:11px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;pointer-events:none}
 #dev h4{margin:0 0 4px;font:600 11px/1 var(--ui);letter-spacing:0.12em;text-transform:uppercase;color:var(--cyan)}
-@media (prefers-reduced-motion:reduce){#prompt,#bravo,#wordmark,#tagline{transition:none}}
+@media (prefers-reduced-motion:reduce){#prompt,#bravo,#wordmark,#tagline,.pop{transition:none}}
 </style>
 </head>
 <body>
@@ -56,8 +68,11 @@ body{font-family:var(--ui);display:flex;align-items:center;justify-content:cente
     <div id="wordmark">Conductor</div>
     <div id="tagline">One gesture begins a note.<br>Every gesture brings your orchestra to life.</div>
     <div id="bravo">Bravo</div>
+    <div id="card" class="pop" hidden><div class="k" id="cardK">Strings</div><div class="t" id="cardT">Strings alone</div><div class="b" id="cardB">Only this section is playing.</div></div>
+    <div id="pause" class="pop" hidden><div class="k">Paused</div><div class="t">The orchestra waits</div>
+      <div class="row r1"><b>Restart</b>Pinch</div>
+      <div class="row r2"><b>Keep conducting</b>Back</div></div>
     <div id="prompt" role="status" aria-live="polite">Your orchestra is waiting.<br>Pinch once to give your first cue.</div>
-    <div id="legend"><span>Pinch</span></div>
     <div id="readout"></div>
   </div>
   <div id="dev" hidden></div>
@@ -65,20 +80,25 @@ body{font-family:var(--ui);display:flex;align-items:center;justify-content:cente
 <script>
 'use strict';
 /* =====================================================================
-   CONDUCTOR — modules
-   Log      verification log (visible in the dev overlay, key D)
-   Score    the original melody and harmony
-   Audio    Web Audio synth orchestra: buses, voices, reverb
-   Clock    shared musical clock (lookahead scheduler, tempo, ritardando)
-   Layers   instrument sections that read the same step counter
-   Visual   canvas rendering: musicians, baton, rings, trails, particles
-   Input    keyboard + opt-in pointer drag → abstract actions
-   Game     the five chapters (state machine)
-   Dev      overlay for verifying audio/clock behaviour
+   CONDUCTOR v0.2 — modules
+   Log       verification log (dev overlay: key D, or #dev in the URL)
+   Score     the original melody and harmony
+   Audio     Web Audio synth orchestra: buses, voice budget, reverb, limiter
+   Clock     shared musical clock (lookahead scheduler, tempo, ritardando)
+   Layers    instrument sections that read the same step counter
+   Gestures  animated hand guide: big demo, docked icons, input feedback
+   Visual    canvas rendering: musicians, baton, rings, trails, particles
+   Nav       history entry so a system Back closes popups instead of the app
+   Input     keyboard + opt-in pointer drag + history back → abstract actions
+   Game      the six chapters (state machine)
+   Dev       overlay for verifying audio/clock behaviour
    ===================================================================== */
+const VERSION = '0.2.0';
 const TAU = Math.PI * 2;
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const ease = k => k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
 const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
 
 /* ---------------- Log ---------------- */
@@ -87,15 +107,13 @@ const Log = {
   add(msg) {
     const t = ((performance.now() - this.t0) / 1000).toFixed(2).padStart(6);
     this.lines.push(`${t}s  ${msg}`);
-    if (this.lines.length > 60) this.lines.shift();
-    Dev.dirty = true;
+    if (this.lines.length > 80) this.lines.shift();
   }
 };
 
 /* ---------------- Score ---------------- */
 /* An original two-bar melody in D major (16 steps per bar, 4 per beat). */
 const Score = {
-  key: 'D major',
   melody: [
     { n: 74, len: 4 }, { n: 76, len: 4 }, { n: 78, len: 4 }, { n: 81, len: 4 },
     { n: 83, len: 6 }, { n: 81, len: 2 }, { n: 78, len: 4 }, { n: 74, len: 4 }
@@ -111,183 +129,219 @@ const Score = {
 Score.melodyStarts = (() => { let s = 0; return Score.melody.map(m => { const o = s; s += m.len; return o; }); })();
 
 /* ---------------- Audio ---------------- */
+/* v0.2 voice budget: every note is registered as a voice on its bus. Each bus has a
+   cap; when a new note would exceed it, the oldest sounding note fades out over ~40 ms
+   at the new note's start time. Tails stop when they become inaudible, vibrato comes
+   from one shared LFO per section, and brass chords share one filter. */
 const Audio = (() => {
-  let ctx = null, master = null, comp = null, reverb = null, reverbReturn = null, noiseBuf = null;
+  let ctx = null, master = null, duck = null, reverb = null, noiseBuf = null;
   const bus = {};
   const BUS = {
-    solo:    { level: 0.95, send: 0.55, filter: false },
-    strings: { level: 0.80, send: 0.45, filter: true },
-    winds:   { level: 0.50, send: 0.50, filter: true },
-    brass:   { level: 0.60, send: 0.35, filter: true },
-    perc:    { level: 0.85, send: 0.30, filter: false }
+    solo:    { level: 0.85, send: 0.50, filter: false, cap: 10, vib: 0 },
+    strings: { level: 0.72, send: 0.42, filter: true,  cap: 16, vib: 6, rate: 5.1 },
+    winds:   { level: 0.50, send: 0.45, filter: true,  cap: 8,  vib: 4, rate: 5.6 },
+    brass:   { level: 0.52, send: 0.30, filter: true,  cap: 12, vib: 5, rate: 5.4 },
+    perc:    { level: 0.78, send: 0.26, filter: false, cap: 6,  vib: 0 }
   };
-  const stats = { createdAt: null, userNotes: 0, scheduledNotes: 0 };
+  const stats = { userNotes: 0, scheduledNotes: 0, active: 0, peak: 0, stolen: 0, maxLateMs: 0 };
 
-  function makeIR() {
-    const len = Math.floor(ctx.sampleRate * 2.8);
+  function makeIR(sec) {
+    const len = Math.floor(ctx.sampleRate * sec);
     const buf = ctx.createBuffer(2, len, ctx.sampleRate);
     for (let c = 0; c < 2; c++) {
       const d = buf.getChannelData(c);
-      for (let i = 0; i < len; i++) {
-        const x = i / len;
-        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - x, 2.7) * (1 - Math.exp(-i / 240));
-      }
+      for (let i = 0; i < len; i++) { const x = i / len; d[i] = (Math.random() * 2 - 1) * Math.pow(1 - x, 2.9) * (1 - Math.exp(-i / 240)); }
     }
     return buf;
   }
   function makeNoise() {
-    const b = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-    const d = b.getChannelData(0);
+    const b = ctx.createBuffer(1, ctx.sampleRate >> 1, ctx.sampleRate); const d = b.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     return b;
   }
   /* Create the context. Only ever called from inside a user-gesture handler. */
   function ensure() {
-    if (ctx) { if (ctx.state !== 'running') ctx.resume().catch(() => {}); return ctx; }
+    if (ctx) { if (ctx.state === 'suspended') ctx.resume().catch(() => {}); return ctx; }
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) { Log.add('Web Audio API unavailable'); return null; }
-    ctx = new AC({ latencyHint: 'interactive' });
-    stats.createdAt = ctx.currentTime;
-    Log.add(`AudioContext created by user gesture (state ${ctx.state}, ${ctx.sampleRate} Hz)`);
-    if (ctx.state !== 'running') {
-      ctx.resume().then(() => Log.add('AudioContext resumed → running')).catch(e => Log.add('resume failed: ' + e));
-    }
-    comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -16; comp.knee.value = 12; comp.ratio.value = 3; comp.attack.value = 0.005; comp.release.value = 0.25;
-    master = ctx.createGain(); master.gain.value = 0.85;
-    master.connect(comp); comp.connect(ctx.destination);
-    reverb = ctx.createConvolver(); reverb.buffer = makeIR();
-    reverbReturn = ctx.createGain(); reverbReturn.gain.value = 0.55;
-    reverb.connect(reverbReturn); reverbReturn.connect(master);
+    ctx = new AC({ latencyHint: 'balanced' });
+    Object.assign(stats, { active: 0, peak: 0, stolen: 0, maxLateMs: 0 });
+    const lat = ctx.baseLatency ? ` · base latency ${(ctx.baseLatency * 1000).toFixed(0)} ms` : '';
+    Log.add(`AudioContext created by user gesture (state ${ctx.state}, ${ctx.sampleRate} Hz${lat})`);
+    if (ctx.state === 'suspended') ctx.resume().then(() => Log.add('AudioContext resumed → running')).catch(e => Log.add('resume failed: ' + e));
+    /* master → duck → glue compressor → brick-wall limiter → out */
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -18; comp.knee.value = 10; comp.ratio.value = 3; comp.attack.value = 0.006; comp.release.value = 0.25;
+    const lim = ctx.createDynamicsCompressor();
+    lim.threshold.value = -4; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.002; lim.release.value = 0.12;
+    master = ctx.createGain(); master.gain.value = 0.62;
+    duck = ctx.createGain(); duck.gain.value = 1;
+    master.connect(duck); duck.connect(comp); comp.connect(lim); lim.connect(ctx.destination);
+    reverb = ctx.createConvolver(); reverb.buffer = makeIR(2.0);
+    const ret = ctx.createGain(); ret.gain.value = 0.55; reverb.connect(ret); ret.connect(master);
     noiseBuf = makeNoise();
     for (const [name, def] of Object.entries(BUS)) {
-      const inp = ctx.createGain(); let node = inp; let filter = null;
-      if (def.filter) {
-        filter = ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 2600; filter.Q.value = 0.5;
-        inp.connect(filter); node = filter;
-      }
+      const inp = ctx.createGain(); let node = inp, filter = null;
+      if (def.filter) { filter = ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 2600; filter.Q.value = 0.5; inp.connect(filter); node = filter; }
       const level = ctx.createGain(); level.gain.value = def.level;
       const send = ctx.createGain(); send.gain.value = def.send;
       node.connect(level); level.connect(master); level.connect(send); send.connect(reverb);
-      bus[name] = { inp, filter, level, send, base: def.level, intensity: 1 };
+      let vib = null;
+      if (def.vib) { const l = ctx.createOscillator(); l.frequency.value = def.rate; vib = ctx.createGain(); vib.gain.value = def.vib; l.connect(vib); l.start(); }
+      bus[name] = { inp, filter, level, send, vib, base: def.level, cap: def.cap, intensity: 1, duck: 1, voices: [] };
     }
     return ctx;
   }
-  /* Smooth dynamics: gain + brightness follow the section's intensity (0..1). */
-  function setIntensity(name, v) {
-    const b = bus[name]; if (!b || !ctx) return;
-    b.intensity = v; const t = ctx.currentTime;
-    b.level.gain.setTargetAtTime(b.base * (0.04 + 0.96 * Math.pow(v, 1.5)), t, 0.09);
-    if (b.filter) b.filter.frequency.setTargetAtTime(500 + Math.pow(v, 1.4) * 6500, t, 0.09);
+  function applyLevel(name, tc = 0.09) {
+    const b = bus[name]; if (!b || !ctx) return; const v = b.intensity, t = ctx.currentTime;
+    b.level.gain.setTargetAtTime(b.base * (0.04 + 0.96 * Math.pow(v, 1.5)) * b.duck, t, tc);
+    if (b.filter) b.filter.frequency.setTargetAtTime(500 + Math.pow(v, 1.4) * 6500, t, tc);
   }
+  function setIntensity(name, v) { const b = bus[name]; if (!b) return; b.intensity = v; applyLevel(name); }
+  function setDuck(name, f, tc = 0.14) { const b = bus[name]; if (!b) return; b.duck = f; applyLevel(name, tc); }
+  function duckAll(f, tc = 0.18) { if (ctx && duck) duck.gain.setTargetAtTime(f, ctx.currentTime, tc); }
+
+  const G = () => ctx.createGain();
   function osc(type, f, t) { const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, t); return o; }
-  function vibrato(t, rate, cents, onset) {
-    const l = osc('sine', rate, t); const g = ctx.createGain();
-    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(cents, t + onset); l.connect(g); l.start(t); return { l, g };
+  function hold(p, t) { if (p.cancelAndHoldAtTime) p.cancelAndHoldAtTime(t); else p.cancelScheduledValues(t); }
+  function steal(v, t) {
+    v.env.forEach(p => { try { hold(p, t); p.setTargetAtTime(0, t, 0.012); } catch (_) {} });
+    v.srcs.forEach(s => { try { s.stop(t + 0.08); } catch (_) {} });
+    v.end = t + 0.08; stats.stolen++;
+  }
+  /* register a note on its bus; enforce the cap; keep live counts for the dev overlay */
+  function voice(name, t, end, env, srcs, vibbed) {
+    const b = bus[name]; stats.scheduledNotes++;
+    const lfo = vibbed ? b.vib : null;
+    srcs.forEach(s => {
+      if (lfo && s.detune) lfo.connect(s.detune);
+      stats.active++; if (stats.active > stats.peak) stats.peak = stats.active;
+      s.onended = () => { stats.active--; if (lfo && s.detune) { try { lfo.disconnect(s.detune); } catch (_) {} } };
+    });
+    b.voices = b.voices.filter(v => v.end > t);
+    if (b.voices.length >= b.cap) {
+      let oldest = 0; for (let i = 1; i < b.voices.length; i++) if (b.voices[i].t < b.voices[oldest].t) oldest = i;
+      steal(b.voices[oldest], t); b.voices.splice(oldest, 1);
+    }
+    b.voices.push({ t, end, env, srcs });
+    if (!(ctx instanceof (window.OfflineAudioContext || function () {}))) {
+      const late = ctx.currentTime - t; if (late > 0.002) stats.maxLateMs = Math.max(stats.maxLateMs, late * 1000);
+    }
   }
 
-  /* The soloist: a harp-like cue with a soft bowed bloom underneath. */
-  function playSolo(midi, t, vel = 0.8) {
-    if (!ctx) return; const f = mtof(midi), b = bus.solo; stats.scheduledNotes++;
-    const parts = [['sine', 1, 0.62, 0.62], ['triangle', 2, 0.14, 0.30], ['sine', 3.003, 0.07, 0.18], ['sine', 5.98, 0.025, 0.09]];
+  /* The soloist: a harp-like cue. mode 'rich' (notes the wearer plays, chimes) adds a third
+     partial and a soft bowed bloom an octave below; 'loop' (the repeating phrase) uses two
+     partials because the strings already give it body; 'light' is a single sine for octave
+     doublings. This keeps the first pinch lush and the finale affordable. */
+  function playSolo(midi, t, vel = 0.8, mode = 'rich') {
+    if (!ctx) return; const f = mtof(midi), b = bus.solo, srcs = [], env = [];
+    const parts = mode === 'light' ? [['sine', 1, 0.5, 0.35]]
+      : mode === 'loop' ? [['sine', 1, 0.62, 0.62], ['triangle', 2, 0.14, 0.30]]
+      : [['sine', 1, 0.62, 0.62], ['triangle', 2, 0.14, 0.30], ['sine', 3.003, 0.06, 0.16]];
+    let end = t;
     parts.forEach(([type, r, gn, tau]) => {
-      const o = osc(type, f * r, t); const g = ctx.createGain();
-      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gn * vel, t + 0.005);
-      g.gain.setTargetAtTime(0, t + 0.012, tau);
-      o.connect(g); g.connect(b.inp); o.start(t); o.stop(t + tau * 6.5 + 0.1);
+      const o = osc(type, f * r, t), g = G(), stop = t + tau * 5;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gn * vel, t + 0.005); g.gain.setTargetAtTime(0, t + 0.012, tau);
+      o.connect(g); g.connect(b.inp); o.start(t); o.stop(stop); srcs.push(o); env.push(g.gain); end = Math.max(end, stop);
     });
-    const bloom = osc('sine', f / 2, t); const bg = ctx.createGain();
-    bg.gain.setValueAtTime(0, t); bg.gain.linearRampToValueAtTime(0.11 * vel, t + 0.14); bg.gain.setTargetAtTime(0, t + 0.16, 0.7);
-    bloom.connect(bg); bg.connect(b.inp); bloom.start(t); bloom.stop(t + 4);
+    if (mode === 'rich') {
+      const bl = osc('sine', f / 2, t), bg = G();
+      bg.gain.setValueAtTime(0, t); bg.gain.linearRampToValueAtTime(0.11 * vel, t + 0.14); bg.gain.setTargetAtTime(0, t + 0.16, 0.6);
+      bl.connect(bg); bg.connect(b.inp); bl.start(t); bl.stop(t + 3.2); srcs.push(bl); env.push(bg.gain); end = Math.max(end, t + 3.2);
+    }
+    voice('solo', t, end, env, srcs, false);
   }
-  function playStrings(midi, t, dur, vel = 0.8) {
-    if (!ctx) return; const f = mtof(midi), b = bus.strings; stats.scheduledNotes++;
-    const attack = Math.min(0.3, dur * 0.45); const vib = vibrato(t, 5.1, 6, 0.7);
-    [-8, 0, 8].forEach(dt => {
-      const o = osc('sawtooth', f, t); o.detune.setValueAtTime(dt, t); vib.g.connect(o.detune);
-      const g = ctx.createGain(); const peak = 0.075 * vel;
-      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + attack);
-      g.gain.setTargetAtTime(0, t + dur, 0.18);
-      o.connect(g); g.connect(b.inp); o.start(t); o.stop(t + dur + 1.1);
-    });
-    vib.l.stop(t + dur + 1.1);
+  /* Strings: two detuned saws per note with a bow attack (was three). Doublings use one. */
+  function playStrings(midi, t, dur, vel = 0.8, saws = 2) {
+    if (!ctx) return; const f = mtof(midi), b = bus.strings;
+    const g = G(), peak = (saws === 2 ? 0.09 : 0.12) * vel, att = Math.min(0.3, dur * 0.45), end = t + dur + 0.85;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + att); g.gain.setTargetAtTime(0, t + dur, 0.17);
+    const srcs = (saws === 2 ? [-7, 7] : [0]).map(dt => { const o = osc('sawtooth', f, t); o.detune.setValueAtTime(dt, t); o.connect(g); o.start(t); o.stop(end); return o; });
+    g.connect(b.inp); voice('strings', t, end, [g.gain], srcs, true);
   }
+  /* Bass: triangle + sine sub, no per-note filter (was saw + sub through a lowpass). */
   function playStringsBass(midi, t, dur, vel = 0.9) {
-    if (!ctx) return; const f = mtof(midi), b = bus.strings; stats.scheduledNotes++;
-    const o = osc('sawtooth', f, t), s = osc('sine', f / 2, t);
-    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420;
-    const g = ctx.createGain(); const peak = 0.16 * vel;
-    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + Math.min(0.25, dur * 0.4)); g.gain.setTargetAtTime(0, t + dur, 0.15);
-    const sg = ctx.createGain(); sg.gain.value = 0.45;
-    o.connect(lp); s.connect(sg); sg.connect(lp); lp.connect(g); g.connect(b.inp);
-    o.start(t); s.start(t); o.stop(t + dur + 1); s.stop(t + dur + 1);
+    if (!ctx) return; const f = mtof(midi), b = bus.strings;
+    const g = G(), end = t + dur + 0.8;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.2 * vel, t + Math.min(0.25, dur * 0.4)); g.gain.setTargetAtTime(0, t + dur, 0.15);
+    const o = osc('triangle', f, t), s = osc('sine', f / 2, t), sg = G(); sg.gain.value = 0.55;
+    o.connect(g); s.connect(sg); sg.connect(g); g.connect(b.inp);
+    o.start(t); s.start(t); o.stop(end); s.stop(end);
+    voice('strings', t, end, [g.gain], [o, s], false);
   }
-  function playWinds(midi, t, dur, vel = 0.6) {
-    if (!ctx) return; const f = mtof(midi), b = bus.winds; stats.scheduledNotes++;
-    const o1 = osc('triangle', f, t), o2 = osc('sine', f, t); const vib = vibrato(t, 5.6, 4, 0.18);
-    vib.g.connect(o1.detune);
-    const g = ctx.createGain(); const peak = 0.17 * vel;
-    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + 0.035); g.gain.setTargetAtTime(0, t + dur, 0.07);
-    const g2 = ctx.createGain(); g2.gain.value = 0.45;
-    o1.connect(g); o2.connect(g2); g2.connect(g); g.connect(b.inp);
-    o1.start(t); o2.start(t); o1.stop(t + dur + 0.6); o2.stop(t + dur + 0.6); vib.l.stop(t + dur + 0.6);
-    const n = ctx.createBufferSource(); n.buffer = noiseBuf; n.loop = true;
-    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f * 2; bp.Q.value = 7;
-    const ng = ctx.createGain(); ng.gain.setValueAtTime(0, t); ng.gain.linearRampToValueAtTime(0.03 * vel, t + 0.012); ng.gain.setTargetAtTime(0, t + 0.02, 0.12);
-    n.connect(bp); bp.connect(ng); ng.connect(b.inp); n.start(t); n.stop(t + 0.8);
+  /* Woodwinds: one triangle per note; the breath transient is optional and short. */
+  function playWinds(midi, t, dur, vel = 0.6, breath = true) {
+    if (!ctx) return; const f = mtof(midi), b = bus.winds;
+    const g = G(), end = t + dur + 0.4;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.22 * vel, t + 0.035); g.gain.setTargetAtTime(0, t + dur, 0.07);
+    const o = osc('triangle', f, t); o.connect(g); g.connect(b.inp); o.start(t); o.stop(end);
+    const srcs = [o], env = [g.gain];
+    if (breath) {
+      const n = ctx.createBufferSource(); n.buffer = noiseBuf;
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f * 2; bp.Q.value = 7;
+      const ng = G(); ng.gain.setValueAtTime(0, t); ng.gain.linearRampToValueAtTime(0.03 * vel, t + 0.012); ng.gain.setTargetAtTime(0, t + 0.02, 0.03);
+      n.connect(bp); bp.connect(ng); ng.connect(b.inp); n.start(t); n.stop(t + 0.15); srcs.push(n); env.push(ng.gain);
+    }
+    voice('winds', t, end, env, srcs, true);
   }
-  function playBrass(midi, t, dur, vel = 0.6) {
-    if (!ctx) return; const f = mtof(midi), b = bus.brass; stats.scheduledNotes++;
-    const o1 = osc('sawtooth', f, t), o2 = osc('sawtooth', f, t), o3 = osc('square', f / 2, t);
-    o2.detune.setValueAtTime(6, t); const vib = vibrato(t, 5.4, 5, 0.3); vib.g.connect(o1.detune);
-    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 1.2;
-    lp.frequency.setValueAtTime(220, t); lp.frequency.linearRampToValueAtTime(900 + vel * 3200, t + 0.05);
-    lp.frequency.setTargetAtTime(650 + vel * 1600, t + 0.06, 0.28);
-    const g = ctx.createGain(); const peak = 0.11 * vel;
+  /* Brass: all notes of a hit share one filter envelope and one gain; the lowest note is doubled. */
+  function playBrassChord(notes, t, dur, vel = 0.6) {
+    if (!ctx) return; const b = bus.brass, end = t + dur + 0.55;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 1.1;
+    lp.frequency.setValueAtTime(220, t); lp.frequency.linearRampToValueAtTime(900 + vel * 3200, t + 0.05); lp.frequency.setTargetAtTime(650 + vel * 1600, t + 0.06, 0.28);
+    const g = G(), peak = 0.11 * vel / Math.sqrt(Math.max(1, notes.length * 0.6));
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + 0.03); g.gain.setTargetAtTime(0, t + dur, 0.11);
-    const g3 = ctx.createGain(); g3.gain.value = 0.3;
-    o1.connect(lp); o2.connect(lp); o3.connect(g3); g3.connect(lp); lp.connect(g); g.connect(b.inp);
-    [o1, o2, o3].forEach(o => { o.start(t); o.stop(t + dur + 0.8); }); vib.l.stop(t + dur + 0.8);
+    const srcs = [];
+    notes.forEach((n, i) => {
+      const f = mtof(n); const o = osc('sawtooth', f, t); o.connect(lp); o.start(t); o.stop(end); srcs.push(o);
+      if (i === 0) { const o2 = osc('sawtooth', f, t); o2.detune.setValueAtTime(6, t); o2.connect(lp); o2.start(t); o2.stop(end); srcs.push(o2); }
+    });
+    lp.connect(g); g.connect(b.inp); voice('brass', t, end, [g.gain], srcs, true);
   }
   function playTimpani(midi, t, vel = 0.8) {
-    if (!ctx) return; const f = mtof(midi), b = bus.perc; stats.scheduledNotes++;
+    if (!ctx) return; const f = mtof(midi), b = bus.perc;
     const o = osc('sine', f * 1.7, t); o.frequency.exponentialRampToValueAtTime(f, t + 0.045);
-    const g = ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.9 * vel, t + 0.006); g.gain.setTargetAtTime(0, t + 0.02, 0.28);
-    o.connect(g); g.connect(b.inp); o.start(t); o.stop(t + 1.8);
+    const g = G(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.9 * vel, t + 0.006); g.gain.setTargetAtTime(0, t + 0.02, 0.28);
+    o.connect(g); g.connect(b.inp); o.start(t); o.stop(t + 1.5);
     const n = ctx.createBufferSource(); n.buffer = noiseBuf;
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500;
-    const ng = ctx.createGain(); ng.gain.setValueAtTime(0.18 * vel, t); ng.gain.setTargetAtTime(0, t + 0.005, 0.05);
-    n.connect(lp); lp.connect(ng); ng.connect(b.inp); n.start(t); n.stop(t + 0.4);
+    const ng = G(); ng.gain.setValueAtTime(0.18 * vel, t); ng.gain.setTargetAtTime(0, t + 0.005, 0.05);
+    n.connect(lp); lp.connect(ng); ng.connect(b.inp); n.start(t); n.stop(t + 0.3);
+    voice('perc', t, t + 1.5, [g.gain, ng.gain], [o, n], false);
   }
-  function suspend() { if (ctx && ctx.state === 'running') ctx.suspend().then(() => Log.add('AudioContext suspended (hidden)')).catch(() => {}); }
-  function resume() { if (ctx && ctx.state === 'suspended') ctx.resume().then(() => Log.add('AudioContext resumed (visible)')).catch(() => {}); }
+  function suspend() { if (ctx && ctx.state === 'running') ctx.suspend().then(() => Log.add('AudioContext suspended (page hidden)')).catch(() => {}); }
+  function resume() { if (ctx && ctx.state === 'suspended') ctx.resume().then(() => Log.add('AudioContext resumed (page visible)')).catch(() => {}); }
   /* Fade and close the whole context. The next first pinch builds a fresh one. */
   function shutdown() {
     if (!ctx) return; const c = ctx, m = master;
     try { m.gain.setTargetAtTime(0, c.currentTime, 0.07); } catch (_) {}
-    ctx = null; master = null; for (const k in bus) delete bus[k];
+    ctx = null; master = null; duck = null; for (const k in bus) delete bus[k];
     setTimeout(() => { c.close().then(() => Log.add('AudioContext closed')).catch(() => {}); }, 450);
   }
   return {
-    ctx: () => ctx, stats, ensure, setIntensity, suspend, resume, shutdown,
-    playSolo, playStrings, playStringsBass, playWinds, playBrass, playTimpani,
+    ctx: () => ctx, stats, ensure, setIntensity, setDuck, duckAll, suspend, resume, shutdown,
+    playSolo, playStrings, playStringsBass, playWinds, playBrassChord, playTimpani,
+    playBrass: (m, t, d, v) => playBrassChord([m], t, d, v),
     now: () => (ctx ? ctx.currentTime : 0), bus: () => bus
   };
 })();
 
 /* ---------------- Clock ---------------- */
 /* One lookahead scheduler drives every section. Tempo changes alter the length of
-   FUTURE steps only, so already-scheduled notes never shift and no layer drifts. */
+   FUTURE steps only, so already-scheduled notes never shift and no layer drifts.
+   v0.2: 350 ms lookahead (was 160 ms) so a busy main thread on the glasses cannot
+   starve the audio schedule. */
 const Clock = (() => {
   const S = { bpm: 84, running: false, step: 0, nextTime: 0, timer: null, startedAt: null,
-              beats: [], lookahead: 0.16, interval: 25, rit: null, paused: false };
+              beats: [], lookahead: 0.35, interval: 25, rit: null, lastTick: 0, maxGapMs: 0, resyncs: 0 };
   const stepDur = () => 60 / S.bpm / 4;
   function tick() {
     const ctx = Audio.ctx(); if (!ctx || !S.running) return;
+    const p = performance.now(); if (S.lastTick) S.maxGapMs = Math.max(S.maxGapMs, p - S.lastTick); S.lastTick = p;
     const now = ctx.currentTime;
-    if (S.nextTime < now - 0.35) {           /* timer was throttled: resync on the grid */
+    if (S.nextTime < now - 0.35) {           /* timer was starved: resync on the grid */
       const missed = Math.floor((now - S.nextTime) / stepDur()) + 1;
-      S.step += missed; S.nextTime += missed * stepDur();
+      S.step += missed; S.nextTime += missed * stepDur(); S.resyncs++;
       Log.add(`clock resynced (+${missed} steps)`);
     }
     while (S.running && S.nextTime < now + S.lookahead) {
@@ -302,25 +356,25 @@ const Clock = (() => {
     get bpm() { return S.bpm; },
     set bpm(v) { S.bpm = clamp(v, 60, 140); },
     get step() { return S.step; }, get running() { return S.running; }, get startedAt() { return S.startedAt; },
+    get maxGapMs() { return S.maxGapMs; }, get resyncs() { return S.resyncs; }, get lookahead() { return S.lookahead; },
     stepDur, beatDur: () => 60 / S.bpm,
     start(at) {
-      S.step = 0; S.nextTime = at; S.startedAt = at; S.running = true; S.rit = null; S.beats = [];
+      S.step = 0; S.nextTime = at; S.startedAt = at; S.running = true; S.rit = null; S.beats = []; S.lastTick = 0; S.maxGapMs = 0;
       clearInterval(S.timer); S.timer = setInterval(tick, S.interval); tick();
       Log.add(`clock started at ${at.toFixed(3)}s · ${S.bpm} bpm`);
     },
     stop() { S.running = false; clearInterval(S.timer); S.timer = null; },
-    pause() { clearInterval(S.timer); S.timer = null; },
+    pause() { clearInterval(S.timer); S.timer = null; S.lastTick = 0; },
     resume() { if (S.running && !S.timer) S.timer = setInterval(tick, S.interval); },
     nextBarStep() { return Math.ceil(S.step / 16) * 16; },
     setRit(start, factor) { S.rit = { start, factor }; },
-    /* beat phase for the baton: which beat we are on and how far through it */
     beat(now) {
       for (let i = S.beats.length - 1; i >= 0; i--) {
         const b = S.beats[i]; if (b.t <= now) return { idx: b.idx, phase: clamp((now - b.t) / (60 / S.bpm), 0, 1) };
       }
       return null;
     },
-    reset() { this.stop(); S.bpm = 84; S.step = 0; S.startedAt = null; S.beats = []; S.rit = null; }
+    reset() { this.stop(); S.bpm = 84; S.step = 0; S.startedAt = null; S.beats = []; S.rit = null; S.maxGapMs = 0; S.resyncs = 0; }
   };
 })();
 
@@ -349,8 +403,8 @@ const Layers = (() => {
     if (active('solo', step)) {
       if (mi >= 0) {
         const m = Score.melody[mi];
-        Audio.playSolo(m.n, t, 0.75); ev(t, 'solo', m.n, 0.75);
-        if (finale) Audio.playSolo(m.n + 12, t, 0.32);
+        Audio.playSolo(m.n, t, 0.75, 'loop'); ev(t, 'solo', m.n, 0.75);
+        if (finale) Audio.playSolo(m.n + 12, t, 0.32, 'light');
       }
       mark('solo', step, t);
     }
@@ -360,14 +414,14 @@ const Layers = (() => {
         Audio.playStringsBass(chord.root, t, dur * 16, 0.9);
         ev(t, 'strings', chord.tones[0], 0.8);
       }
-      if (finale && pos === 8) { chord.tones.forEach(n => Audio.playStrings(n + 12, t, dur * 8, 0.45)); ev(t, 'strings', chord.tones[2] + 12, 0.5); }
-      if (St.phase >= 2 && mi >= 0) { const m = Score.melody[mi]; Audio.playStrings(m.n - 12, t, dur * m.len, 0.7); }
+      if (finale && pos === 8) { chord.tones.forEach(n => Audio.playStrings(n + 12, t, dur * 8, 0.45, 1)); ev(t, 'strings', chord.tones[2] + 12, 0.5); }
+      if (St.phase >= 2 && mi >= 0) { const m = Score.melody[mi]; Audio.playStrings(m.n - 12, t, dur * m.len, 0.7, 1); }
       mark('strings', step, t);
     }
     if (active('winds', step)) {
       const up = [...chord.tones, chord.tones[0] + 12].map(n => n + 12);
-      if (finale) { const seq = [0, 1, 2, 3, 2, 1]; const n = up[seq[pos % 6]]; Audio.playWinds(n, t, dur * 1.15, 0.55); ev(t, 'winds', n, 0.5); }
-      else if (pos % 2 === 0) { const seq = [0, 1, 2, 3, 2, 1, 0, 1]; const n = up[seq[pos / 2]]; Audio.playWinds(n, t, dur * 2.1, 0.62); ev(t, 'winds', n, 0.62); }
+      if (finale) { const seq = [0, 1, 2, 3, 2, 1]; const n = up[seq[pos % 6]]; Audio.playWinds(n, t, dur * 1.1, 0.55, pos % 4 === 0); ev(t, 'winds', n, 0.5); }
+      else if (pos % 2 === 0) { const seq = [0, 1, 2, 3, 2, 1, 0, 1]; const n = up[seq[pos / 2]]; Audio.playWinds(n, t, dur * 2.1, 0.62, pos % 4 === 0); ev(t, 'winds', n, 0.62); }
       mark('winds', step, t);
     }
     if (active('brass', step)) {
@@ -375,12 +429,12 @@ const Layers = (() => {
         const hits = { 0: 6, 6: 2, 8: 4, 12: 4 };
         if (hits[pos] !== undefined) {
           const vel = pos === 0 ? 0.85 : 0.62;
-          [chord.root + 12, ...chord.tones].forEach((n, k) => Audio.playBrass(n, t, dur * hits[pos] * 0.9, vel * (k === 0 ? 1 : 0.7)));
+          Audio.playBrassChord([chord.root + 12, ...chord.tones], t, dur * hits[pos] * 0.9, vel);
           ev(t, 'brass', chord.tones[0], vel);
         }
       } else if (pos === 0 || pos === 8) {
         const n = chord.root + 12;
-        Audio.playBrass(n, t, dur * 4, 0.55); Audio.playBrass(n + 7, t, dur * 4, 0.4); ev(t, 'brass', n, 0.55);
+        Audio.playBrassChord([n, n + 7], t, dur * 4, 0.55); ev(t, 'brass', n, 0.55);
       }
       mark('brass', step, t);
     }
@@ -394,8 +448,8 @@ const Layers = (() => {
   }
   function finalChord(t) {
     [62, 66, 69, 74].forEach(n => Audio.playStrings(n, t, 5.2, 0.95)); Audio.playStringsBass(50, t, 5.2, 1);
-    [74, 78, 81, 86].forEach((n, i) => Audio.playWinds(n, t + i * 0.02, 4.4, 0.6));
-    [50, 62, 66, 69].forEach((n, i) => Audio.playBrass(n, t, 4.6, i === 0 ? 1 : 0.75));
+    [74, 78, 81, 86].forEach((n, i) => Audio.playWinds(n, t + i * 0.02, 4.4, 0.6, i === 0));
+    Audio.playBrassChord([50, 62, 66, 69], t, 4.6, 0.95);
     [74, 78, 81, 86].forEach((n, i) => Audio.playSolo(n, t + i * 0.09, 0.85));
     Audio.playTimpani(38, t, 1); Audio.playTimpani(38, t + 0.5, 0.5);
     ev(t, 'solo', 86, 1, 'final'); ev(t, 'strings', 74, 1); ev(t, 'winds', 86, 1); ev(t, 'brass', 69, 1); ev(t, 'perc', 38, 1);
@@ -416,7 +470,7 @@ const Layers = (() => {
       }
       if (name === 'brass' && pos % 8 !== 0) {
         const n = chord.root + 12, d = Math.min(dur, 4 * Clock.stepDur());
-        Audio.playBrass(n, t, d, 0.55); Audio.playBrass(n + 7, t, d, 0.4); ev(t, 'brass', n, 0.55);
+        Audio.playBrassChord([n, n + 7], t, d, 0.55); ev(t, 'brass', n, 0.55);
       }
     }
     Log.add(`${name} joined at step ${l.joinStep}`);
@@ -437,6 +491,267 @@ const Layers = (() => {
   };
 })();
 
+/* ---------------- Gestures ---------------- */
+/* A line-art right hand seen from the thumb side, fingers pointing left. It shows the
+   Meta Neural Band gestures the glasses turn into input events:
+     pinch    thumb taps index finger          → Enter
+     swipeLR  thumb slides along index finger  → ArrowLeft / ArrowRight
+     swipeUD  thumb slides up / down on it     → ArrowUp / ArrowDown
+     drag     pinch held while the hand moves  → pointer events (opt-in)
+     back     thumb taps middle finger         → Escape / history back
+   The guide reacts to input EVENTS only. It never claims to see the wearer's hand.
+   SWIPE_FLIP: set true if the glasses map "thumb toward fingertip" to ArrowRight. */
+const Gestures = (() => {
+  const SWIPE_FLIP = false;
+  const CY = [94, 231, 255], IV = [246, 241, 227], GO = [242, 199, 107];
+  const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${clamp(a, 0, 1)})`;
+  const INFO = {
+    pinch:   { name: 'Pinch',        how: 'Tap your thumb to your index finger', period: 1.6 },
+    swipeLR: { name: 'Swipe',        how: 'Slide your thumb along your index finger', period: 2.6 },
+    swipeUD: { name: 'Swipe',        how: 'Slide your thumb up or down on your index finger', period: 2.6 },
+    drag:    { name: 'Pinch & drag', how: 'Hold the pinch and move your hand', period: 2.8 },
+    back:    { name: 'Back',         how: 'Tap your thumb to your middle finger', period: 1.8 }
+  };
+  const ACTION = { select: 'pinch', left: 'swipeLR', right: 'swipeLR', up: 'swipeUD', down: 'swipeUD', dragstart: 'drag', drag: 'drag', back: 'back' };
+
+  /* ----- skeleton ----- */
+  const LEN = { index: [26, 18, 14], middle: [27, 19, 15], ring: [22, 14, 10], thumb: [30, 28] };
+  const BASE = { index: { x: 0, y: 4 }, middle: { x: 4, y: 15 }, ring: { x: 10, y: 26 }, thumb: { x: 34, y: 10 } };
+  const CURL = { index: [0.20, 0.60, 1.00], middle: [0.35, 0.95, 1.55], ring: [0.70, 1.65, 2.45] };
+  const THENAR = { x: 44, y: 16 };
+  function chain(b, lens, curl, k, lift = 0) {
+    const pts = [{ x: b.x, y: b.y }]; let p = pts[0];
+    for (let i = 0; i < lens.length; i++) { const a = Math.PI - curl[i] * k + lift; p = { x: p.x + lens[i] * Math.cos(a), y: p.y + lens[i] * Math.sin(a) }; pts.push(p); }
+    return pts;
+  }
+  function ik(B, T, L1, L2) {
+    const dx = T.x - B.x, dy = T.y - B.y; const d = clamp(Math.hypot(dx, dy), Math.abs(L1 - L2) + 0.5, L1 + L2 - 0.5);
+    const a = Math.atan2(dy, dx); const A = Math.acos(clamp((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d), -1, 1));
+    const J = { x: B.x + L1 * Math.cos(a + A), y: B.y + L1 * Math.sin(a + A) };
+    return [B, J, { x: B.x + d * Math.cos(a), y: B.y + d * Math.sin(a) }];
+  }
+  const P = (x, y) => ({ x, y }), mix = (p, q, k) => P(lerp(p.x, q.x, k), lerp(p.y, q.y, k));
+  const THUMB_REST = P(-40, 6);
+  /* the thumb's base knuckle follows its tip a little, like a real metacarpal */
+  function thumb(T) {
+    const B = BASE.thumb, L = LEN.thumb[0] + LEN.thumb[1], d = Math.hypot(T.x - B.x, T.y - B.y);
+    const k = clamp(1 - (L * 0.9) / Math.max(d, 1), 0, 0.8);   /* keep the thumb long and gently bent */
+    return ik(P(B.x + (T.x - B.x) * k, B.y + (T.y - B.y) * k), T, LEN.thumb[0], LEN.thumb[1]);
+  }
+  function along(pts, u) { const i = clamp(Math.floor(u), 0, pts.length - 2), k = u - i; return { p: mix(pts[i], pts[i + 1], k), d: P(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y) }; }
+  /* pinch envelope over one period: approach → touch → release → rest */
+  function tapEnv(p) { if (p < 0.12) return 0; if (p < 0.40) return ease((p - 0.12) / 0.28); if (p < 0.55) return 1; if (p < 0.82) return 1 - ease((p - 0.55) / 0.27); return 0; }
+
+  /* pose(kind, phase 0..1) → points, contact, arrows, offsets */
+  function pose(kind, p) {
+    let iK = 1, iLift = 0, mK = 1, mLift = 0, thumbT = THUMB_REST, contact = 0, cpt = null, arrow = null, shift = P(0, 0), active = 'index';
+    if (kind === 'pinch' || kind === 'drag') {
+      const e = kind === 'drag' ? (p < 0.1 ? ease(p / 0.1) : p > 0.92 ? 1 - ease((p - 0.92) / 0.08) : 1) : tapEnv(p);
+      iK = 1 + 0.12 * e;
+      const I = chain(BASE.index, LEN.index, CURL.index, iK);
+      const tip = I[3]; const target = P(tip.x - 3, tip.y - 4);
+      thumbT = mix(THUMB_REST, target, e); contact = e > 0.96 ? 1 : 0; cpt = target;
+      if (kind === 'drag') {
+        const m = p < 0.12 ? 0 : p > 0.9 ? 0 : (p - 0.12) / 0.78; shift = P(Math.sin(m * TAU) * 44, 0);
+        arrow = { type: 'h2', dir: Math.cos(m * TAU) >= 0 ? 1 : -1, on: contact };
+      }
+    } else if (kind === 'swipeLR' || kind === 'swipeUD') {
+      const half = p < 0.5 ? 0 : 1, q = (p % 0.5) / 0.5;
+      const I = chain(BASE.index, LEN.index, CURL.index, 1);
+      let s0, s1, o0, o1;
+      /* the thumb pad rides on top of the index finger, from its middle knuckle forward */
+      if (kind === 'swipeLR') { const dirLeft = half === 0; s0 = dirLeft ? 0.9 : 1.95; s1 = dirLeft ? 1.95 : 0.9; o0 = o1 = 9; arrow = { type: 'h', dir: dirLeft ? -1 : 1 }; }
+      else { const dirUp = half === 0; s0 = s1 = 1.45; o0 = dirUp ? 7 : 17; o1 = dirUp ? 17 : 7; arrow = { type: 'v', dir: dirUp ? -1 : 1 }; }
+      let k = 0, touch = 0;
+      if (q < 0.12) { k = 0; touch = ease(q / 0.12); } else if (q < 0.58) { k = ease((q - 0.12) / 0.46); touch = 1; } else if (q < 0.72) { k = 1; touch = 1; } else { k = 1 - ease((q - 0.72) / 0.28); touch = 1 - ease((q - 0.72) / 0.28); }
+      const s = lerp(s0, s1, k), o = lerp(o0, o1, k);
+      const at = along(I, s); const dl = Math.hypot(at.d.x, at.d.y); const n = P(at.d.y / dl, -at.d.x / dl);
+      const on = P(at.p.x + n.x * o, at.p.y + n.y * o);
+      thumbT = mix(P(on.x + 6, on.y - 12), on, touch); contact = touch > 0.9 && q < 0.72 ? 0.7 : 0; cpt = on;
+      arrow.on = q > 0.1 && q < 0.72 ? 1 : 0; arrow.k = k;
+    } else if (kind === 'back') {
+      const e = tapEnv(p); active = 'middle';
+      iLift = 0.5 * Math.min(1, e * 1.6 + 0.35); iK = 0.5;
+      mK = 0.9;
+      const M = chain(BASE.middle, LEN.middle, CURL.middle, mK);
+      const tip = M[3]; const target = P(tip.x - 3, tip.y - 3);
+      thumbT = mix(THUMB_REST, target, e); contact = e > 0.96 ? 1 : 0; cpt = target;
+    }
+    const I = chain(BASE.index, LEN.index, CURL.index, iK, -iLift);
+    const M = chain(BASE.middle, LEN.middle, CURL.middle, mK, -mLift);
+    const R = chain(BASE.ring, LEN.ring, CURL.ring, 1);
+    const T = thumb(thumbT);
+    return { I, M, R, T, contact, cpt, arrow, shift, active };
+  }
+
+  /* ----- drawing ----- */
+  function limb(g, pts, w, col, a, ol, s) {
+    g.beginPath(); g.moveTo(pts[0].x, pts[0].y); for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+    g.lineWidth = w + (2 * ol) / s; g.strokeStyle = rgba(col, a); g.stroke();
+    g.lineWidth = w; g.strokeStyle = '#000'; g.stroke();
+  }
+  /* back of the hand + wrist as one tapered outline, filled black so it hides what is behind */
+  function palm(g, col, a, ol, s) {
+    g.beginPath();
+    g.moveTo(-4, -3);
+    g.quadraticCurveTo(30, -10, 74, 4);            /* knuckles → back of hand */
+    g.quadraticCurveTo(100, 10, 128, 12);          /* wrist → forearm top */
+    g.lineTo(128, 40);
+    g.quadraticCurveTo(98, 42, 76, 46);            /* forearm underside → heel of the hand */
+    g.quadraticCurveTo(46, 52, 18, 38);            /* heel → under the fingers */
+    g.quadraticCurveTo(0, 26, -4, -3);
+    g.closePath();
+    g.fillStyle = '#000'; g.fill();
+    g.lineWidth = (2 * ol) / s; g.strokeStyle = rgba(col, a); g.stroke();
+    g.lineWidth = 1 / s; g.strokeStyle = rgba(col, a * 0.35);  /* wrist crease */
+    g.beginPath(); g.moveTo(96, 9); g.quadraticCurveTo(92, 26, 96, 43); g.stroke();
+  }
+  /* draw a hand. x,y = screen position of the hand's visual centre; s = scale */
+  function drawHand(g, kind, p, x, y, s, o = {}) {
+    const alpha = o.alpha ?? 1, ol = o.ol ?? 1.4, flash = o.flash ?? 0;
+    const q = pose(kind, p);
+    const base = flash > 0 ? GO : CY, hi = flash > 0 ? GO : IV, act = kind === 'back' ? GO : hi;
+    const f = o.focus || P(30, 18);
+    g.save();
+    if (o.clip) { g.beginPath(); g.rect(x - o.clip.w / 2, y - o.clip.h / 2, o.clip.w, o.clip.h); g.clip(); }
+    const sh = o.noShift ? P(0, 0) : q.shift; g.translate(x + sh.x * s, y + sh.y * s); g.scale(s, s); g.translate(-f.x, -f.y);
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    const A = alpha;
+    limb(g, q.R, 11, base, 0.4 * A, ol, s);
+    limb(g, q.M, 12.5, kind === 'back' ? act : base, (kind === 'back' ? 0.95 : 0.5) * A, ol, s);
+    palm(g, base, 0.8 * A, ol, s);
+    limb(g, q.I, 13, kind === 'back' ? base : hi, (kind === 'back' ? 0.6 : 0.95) * A, ol, s);
+    limb(g, [THENAR, q.T[0]], 18, base, 0.75 * A, ol, s);
+    limb(g, q.T, 13.5, kind === 'back' ? act : hi, 0.98 * A, ol, s);
+    /* contact spark */
+    if (q.contact > 0 && q.cpt) {
+      const c = q.cpt; const glow = g.createRadialGradient(c.x, c.y, 0, c.x, c.y, 16);
+      glow.addColorStop(0, rgba(GO, 0.85 * A * q.contact)); glow.addColorStop(1, rgba(GO, 0));
+      g.fillStyle = glow; g.beginPath(); g.arc(c.x, c.y, 16, 0, TAU); g.fill();
+      g.strokeStyle = rgba(GO, 0.9 * A * q.contact); g.lineWidth = 1.2 / s; g.beginPath(); g.arc(c.x, c.y, 11 + 6 * (p % 0.2) * 5, 0, TAU); g.stroke();
+    }
+    g.restore();
+    /* direction arrows (screen space, not scaled with the hand so they stay crisp) */
+    if (q.arrow && o.arrows !== false) arrows(g, q, x, y, s, A, flash);
+  }
+  function chevron(g, x, y, dx, dy, sz, col, a) {
+    g.strokeStyle = rgba(col, a); g.lineWidth = Math.max(1.4, sz * 0.22); g.lineCap = 'round'; g.lineJoin = 'round';
+    const px = -dy, py = dx; g.beginPath();
+    g.moveTo(x - dx * sz * 0.5 + px * sz * 0.6, y - dy * sz * 0.5 + py * sz * 0.6); g.lineTo(x + dx * sz * 0.5, y + dy * sz * 0.5);
+    g.lineTo(x - dx * sz * 0.5 - px * sz * 0.6, y - dy * sz * 0.5 - py * sz * 0.6); g.stroke();
+  }
+  function arrows(g, q, x, y, s, A, flash) {
+    const ar = q.arrow; const col = flash > 0 ? GO : CY; const on = ar.on ?? 0;
+    let dir = ar.dir; if (ar.type === 'h' && SWIPE_FLIP) dir = -dir;
+    if (ar.type === 'h') {
+      const cx = x - 6 * s, cy = y - 50 * s, sz = 9 * s;
+      for (let i = 0; i < 3; i++) chevron(g, cx + dir * (i - 1) * sz * 1.1, cy, dir, 0, sz, col, A * (0.25 + 0.75 * on) * (0.35 + 0.3 * i));
+      chevron(g, cx - dir * sz * 2.6, cy, -dir, 0, sz * 0.8, col, A * 0.14);
+    } else if (ar.type === 'v') {
+      const cx = x - 72 * s, cy = y - 8 * s, sz = 9 * s;
+      for (let i = 0; i < 3; i++) chevron(g, cx, cy + dir * (i - 1) * sz * 1.1, 0, dir, sz, col, A * (0.25 + 0.75 * on) * (0.35 + 0.3 * i));
+      chevron(g, cx, cy - dir * sz * 2.6, 0, -dir, sz * 0.8, col, A * 0.14);
+    } else if (ar.type === 'h2') {
+      const cy = y + 47 * s, sz = 8 * s;
+      chevron(g, x - 70 * s, cy, -1, 0, sz, col, A * (ar.dir < 0 ? 0.95 : 0.3));
+      chevron(g, x + 70 * s, cy, 1, 0, sz, col, A * (ar.dir > 0 ? 0.95 : 0.3));
+      g.strokeStyle = rgba(col, A * 0.3); g.lineWidth = 1.2; g.setLineDash([3, 5]);
+      g.beginPath(); g.moveTo(x - 60 * s, cy); g.lineTo(x + 60 * s, cy); g.stroke(); g.setLineDash([]);
+    }
+  }
+
+  /* small icon: the fingertip area only, cropped, with its own tiny direction marks */
+  const ICON = { s: 0.5, w: 50, h: 44, focus: P(-26, 20) };
+  function drawIcon(g, kind, p, x, y, a, flash) {
+    drawHand(g, kind, p, x, y, ICON.s, { alpha: a, ol: 1.1, flash, arrows: false, focus: ICON.focus, clip: ICON, noShift: true });
+    const col = flash > 0 ? GO : CY, sz = 5;
+    if (kind === 'swipeLR') { chevron(g, x - 27, y, -1, 0, sz, col, a); chevron(g, x + 27, y, 1, 0, sz, col, a); }
+    else if (kind === 'swipeUD') { chevron(g, x - 27, y - 6, 0, -1, sz, col, a); chevron(g, x - 27, y + 6, 0, 1, sz, col, a); }
+    else if (kind === 'drag') { chevron(g, x - 27, y + 8, -1, 0, sz, col, a); chevron(g, x + 27, y + 8, 1, 0, sz, col, a); }
+  }
+
+  /* ----- guide state: one big demo + a dock of small icons ----- */
+  const DEMO = { x: 300, y: 318, s: 1.5 }, DOCK_Y = 566, ICON_S = ICON.s;
+  const S = { demo: null, dock: [], slots: {}, flash: {}, pulse: {}, extra: [], t: 0, hold: false };
+  const iconPhase = { pinch: 0.45, swipeLR: 0.3, swipeUD: 0.3, drag: 0.35, back: 0.45 };
+
+  function teach(key, opts = {}) {
+    S.demo = { key, t0: S.t, state: 'in', hint: !!opts.hint, out0: 0 };
+    Log.add(`guide: ${opts.hint ? 'hint' : 'teach'} ${key}`);
+  }
+  function dismiss() { if (S.demo && S.demo.state !== 'out') { S.demo.state = 'out'; S.demo.out0 = S.t; } }
+  function setDock(items) { S.dock = items.map(i => ({ ...i })); }
+  function input(action) {
+    const key = ACTION[action]; if (!key) return;
+    S.flash[key] = S.t;
+    if (S.demo && S.demo.key === key && S.demo.state !== 'out') dismiss();
+  }
+  function pulse(key) { S.pulse[key] = S.t; }
+  function flashOnly(action) { const key = ACTION[action]; if (key) S.flash[key] = S.t; }
+  /* extra icons drawn at fixed positions (used by the pause popup) */
+  function setExtra(list) { S.extra = list || []; }
+
+  function layoutDock(g) {
+    g.font = '600 11px Manrope, system-ui, sans-serif'; try { g.letterSpacing = '1.6px'; } catch (_) {}
+    const items = S.dock.map(d => ({ ...d, w: 70 + g.measureText(d.label.toUpperCase()).width }));
+    const gap = 22, total = items.reduce((a, i) => a + i.w, 0) + gap * Math.max(0, items.length - 1);
+    let x = 300 - total / 2; S.slots = {};
+    items.forEach(i => { i.x = x; S.slots[i.key] = { x: x + 30, y: DOCK_Y }; x += i.w + gap; });
+    return items;
+  }
+  function draw(g, dt) {
+    S.t += dt; const t = S.t;
+    /* dock */
+    const items = layoutDock(g);
+    for (const it of items) {
+      const fl = S.flash[it.key] !== undefined ? clamp(1 - (t - S.flash[it.key]) / 0.7, 0, 1) : 0;
+      const pu = S.pulse[it.key] !== undefined ? clamp(1 - (t - S.pulse[it.key]) / 1.6, 0, 1) : 0;
+      const hidden = S.demo && S.demo.key === it.key && S.demo.state !== 'out';
+      const period = INFO[it.key].period;
+      const ph = (fl > 0 || pu > 0) ? ((t * 1.2 / period) % 1) : iconPhase[it.key];
+      const a = hidden ? 0.25 : 0.62 + 0.38 * Math.max(fl, pu * (0.5 + 0.5 * Math.sin(t * 9)));
+      drawIcon(g, it.key, ph, it.x + 30, DOCK_Y, a, fl);
+      g.font = '600 11px Manrope, system-ui, sans-serif'; try { g.letterSpacing = '1.6px'; } catch (_) {}
+      g.fillStyle = fl > 0 ? rgba(GO, 0.95) : rgba(CY, 0.6 + 0.4 * Math.max(pu, 0));
+      g.textAlign = 'left'; g.textBaseline = 'middle';
+      g.fillText(it.label.toUpperCase(), it.x + 70, DOCK_Y + 1);
+    }
+    try { g.letterSpacing = '0px'; } catch (_) {}
+    /* extra (popup) icons */
+    for (const e of S.extra) {
+      const fl = S.flash[e.key] !== undefined ? clamp(1 - (t - S.flash[e.key]) / 0.7, 0, 1) : 0;
+      drawIcon(g, e.key, (t / INFO[e.key].period) % 1, e.x, e.y, 0.95, fl);
+    }
+    /* big demo */
+    const d = S.demo; if (!d || S.hold) return;
+    const age = t - d.t0; const info = INFO[d.key];
+    let a = clamp(age / 0.45, 0, 1), x = DEMO.x, y = DEMO.y, s = DEMO.s, focus = P(30, 18), arrowsOn = true;
+    if (d.state === 'out') {
+      /* shrink into its dock slot, so the wearer sees where the reminder lives */
+      const k = ease(clamp((t - d.out0) / 0.55, 0, 1)); const slot = S.slots[d.key];
+      if (slot) { x = lerp(DEMO.x, slot.x, k); y = lerp(DEMO.y, slot.y, k); s = lerp(DEMO.s, ICON_S, k); focus = mix(focus, ICON.focus, k); }
+      a *= 1 - k * (slot ? 0.4 : 1); arrowsOn = false;
+      if (k >= 1) { S.demo = null; S.flash[d.key] = t; return; }
+    }
+    drawHand(g, d.key, (age / info.period) % 1, x, y, s, { alpha: a, ol: 1.5, focus, arrows: arrowsOn });
+    if (d.state !== 'out') {
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = '600 12px Manrope, system-ui, sans-serif'; try { g.letterSpacing = '3px'; } catch (_) {}
+      g.fillStyle = rgba(CY, 0.95 * a); g.fillText(info.name.toUpperCase(), DEMO.x, DEMO.y + 100);
+      try { g.letterSpacing = '0px'; } catch (_) {}
+      g.font = 'italic 500 17px "Cormorant Garamond", Georgia, serif'; g.fillStyle = rgba(IV, 0.85 * a);
+      g.fillText(info.how, DEMO.x, DEMO.y + 121);
+    }
+  }
+  return {
+    INFO, ACTION, teach, dismiss, setDock, input, pulse, flashOnly, setExtra, draw, drawHand, drawIcon, pose,
+    showing: () => !!(S.demo && S.demo.state !== 'out'), demoKey: () => (S.demo ? S.demo.key : null),
+    hold(on) { S.hold = !!on; },
+    dim: () => (S.demo && S.demo.state !== 'out' && !S.hold ? 0.3 : 1),
+    reset() { S.demo = null; S.dock = []; S.flash = {}; S.pulse = {}; S.extra = []; S.hold = false; }
+  };
+})();
+
 /* ---------------- Visual ---------------- */
 const Visual = (() => {
   const W = 600, H = 600, CX = 300, CY = 395, RY = 0.62;
@@ -444,11 +759,19 @@ const Visual = (() => {
   const COL = { strings: [94, 231, 255], winds: [246, 241, 227], brass: [242, 199, 107], solo: [255, 244, 214], perc: [242, 199, 107] };
   const SEC = { strings: { angle: 150, label: 'Strings' }, winds: { angle: 90, label: 'Woodwinds' }, brass: { angle: 30, label: 'Brass' } };
   const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${clamp(a, 0, 1)})`;
-  let cv, g, last = 0, reduced = false;
-  const musicians = [];
+  let cv, g, last = 0, reduced = false, layerA = 1;
+  const musicians = [], sprites = {};
   const V = { queue: [], rings: [], parts: [], trail: [], solo: { x: 300, y: 319, lit: 0 }, flick: 0, batonAngle: -Math.PI / 2,
-              focus: null, joined: {}, intensity: {}, energy: 0, chapter: 0, burst: 0, finished: false, sectionPulse: {} };
+              focus: null, joined: {}, intensity: {}, energy: 0, chapter: 0, burst: 0, finished: false, sectionPulse: {}, dim: 1, dimTarget: 1, solo_section: null };
   const pos = (deg, r) => { const a = deg * Math.PI / 180; return [CX + r * Math.cos(a), CY - r * RY * Math.sin(a)]; };
+  /* v0.2: glow sprites are rendered once and stamped with drawImage (no gradients per frame) */
+  function sprite(c) {
+    const k = c.join(); if (sprites[k]) return sprites[k];
+    const s = document.createElement('canvas'); s.width = s.height = 128; const x = s.getContext('2d');
+    const gr = x.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, rgba(c, 1)); gr.addColorStop(0.45, rgba(c, 0.35)); gr.addColorStop(1, rgba(c, 0));
+    x.fillStyle = gr; x.fillRect(0, 0, 128, 128); return (sprites[k] = s);
+  }
+  function halo(x, y, r, c, a) { if (a <= 0.01) return; g.globalAlpha = clamp(a, 0, 1) * layerA; g.drawImage(sprite(c), x - r, y - r, r * 2, r * 2); g.globalAlpha = layerA; }
 
   function init(canvas) {
     cv = canvas; g = cv.getContext('2d');
@@ -460,23 +783,19 @@ const Visual = (() => {
     const [sx, sy] = pos(90, 122); V.solo.x = sx; V.solo.y = sy;
     requestAnimationFrame(frame);
   }
-  function ring(x, y, color, speed = 1, width = 1.5) { V.rings.push({ x, y, r: 6, a: 0.9, color, speed, width }); }
-  function spawn(x, y, color, n, spread = 1, up = 1) {
+  function ring(x, y, color, speed = 1, width = 1.5) { V.rings.push({ x, y, r: 6, a: 0.9, color, speed, width }); if (V.rings.length > 12) V.rings.shift(); }
+  function spawn(x, y, color, n, spread = 1) {
     if (reduced) n = Math.ceil(n / 3);
     for (let i = 0; i < n; i++) {
-      const ang = -Math.PI / 2 + (Math.random() - 0.5) * 1.6 * spread;
-      const sp = 28 + Math.random() * 70;
-      V.parts.push({ x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp * up, life: 0.7 + Math.random() * 0.7, age: 0, color, w: 1 + Math.random() * 1.2 });
-      if (V.parts.length > 220) V.parts.shift();
+      const ang = -Math.PI / 2 + (Math.random() - 0.5) * 1.6 * spread, sp = 28 + Math.random() * 70;
+      V.parts.push({ x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, life: 0.7 + Math.random() * 0.7, age: 0, color, w: 1 + Math.random() * 1.2 });
+      if (V.parts.length > 160) V.parts.shift();
     }
   }
   function trigger(e) {
     const color = COL[e.section] || COL.solo;
-    if (e.kind === 'final') { V.burst = 1; V.finished = true; ring(V.solo.x, V.solo.y, COL.brass, 1.6, 3); ring(V.solo.x, V.solo.y, COL.solo, 1.1, 2); spawn(V.solo.x, V.solo.y, COL.brass, 90, 2.2); }
-    if (e.section === 'solo') {
-      V.solo.lit = 1; V.flick = 1; spawn(V.solo.x, V.solo.y - 10, color, 4, 0.8);
-      return;
-    }
+    if (e.kind === 'final') { V.burst = 1; V.finished = true; ring(V.solo.x, V.solo.y, COL.brass, 1.6, 3); ring(V.solo.x, V.solo.y, COL.solo, 1.1, 2); spawn(V.solo.x, V.solo.y, COL.brass, 80, 2.2); }
+    if (e.section === 'solo') { V.solo.lit = 1; V.flick = 1; spawn(V.solo.x, V.solo.y - 10, color, 4, 0.8); return; }
     if (e.section === 'perc') { V.sectionPulse.brass = 1; V.sectionPulse.strings = 1; V.sectionPulse.winds = 1; return; }
     const ms = musicians.filter(m => m.section === e.section);
     ms.forEach(m => { if (Math.random() < 0.45 + e.vel * 0.5) m.lit = Math.max(m.lit, 0.55 + 0.45 * e.vel * (0.6 + Math.random() * 0.4)); });
@@ -486,17 +805,14 @@ const Visual = (() => {
   }
   function update(dt, now) {
     for (const m of musicians) m.lit = Math.max(0, m.lit - dt * 1.7);
-    V.solo.lit = Math.max(0, V.solo.lit - dt * 1.1);
-    V.flick = Math.max(0, V.flick - dt * 1.4);
-    V.burst = Math.max(0, V.burst - dt * 0.35);
+    V.solo.lit = Math.max(0, V.solo.lit - dt * 1.1); V.flick = Math.max(0, V.flick - dt * 1.4); V.burst = Math.max(0, V.burst - dt * 0.35);
     for (const k in V.sectionPulse) V.sectionPulse[k] = Math.max(0, V.sectionPulse[k] - dt * 2.2);
     V.rings = V.rings.filter(r => { r.r += dt * 210 * r.speed; r.a -= dt * 0.9 * r.speed; return r.a > 0; });
     V.parts = V.parts.filter(p => { p.age += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy -= 12 * dt; return p.age < p.life; });
-    /* baton */
-    let target;
-    const b = Clock.running ? Clock.beat(now) : null;
+    V.dim += (Math.min(V.dimTarget, Gestures.dim()) - V.dim) * Math.min(1, dt * 6);
+    let target; const b = Clock.running ? Clock.beat(now) : null;
     if (b) { const phi = b.idx + b.phase; target = -Math.PI / 2 + 0.5 * Math.sin(phi * Math.PI) * (0.75 + 0.5 * V.energy); }
-    else { target = -Math.PI / 2 + Math.sin(now * 1.3 + performance.now() / 1400) * 0.035 - V.flick * 0.5 * Math.sin(V.flick * Math.PI); }
+    else { target = -Math.PI / 2 + Math.sin(performance.now() / 900) * 0.035 - V.flick * 0.5 * Math.sin(V.flick * Math.PI); }
     V.batonAngle += (target - V.batonAngle) * Math.min(1, dt * 14);
     const tip = { x: PIVOT.x + Math.cos(V.batonAngle) * BATON, y: PIVOT.y + Math.sin(V.batonAngle) * BATON };
     V.trail.push(tip); if (V.trail.length > 14) V.trail.shift();
@@ -512,58 +828,47 @@ const Visual = (() => {
     else { g.moveTo(m.x + 3, m.y - 1); g.lineTo(m.x + 7, m.y - 3); g.arc(m.x + 9, m.y - 3, 2.6, Math.PI, TAU + Math.PI, true); }
     g.stroke();
   }
-  function halo(x, y, r, color, a) {
-    if (a <= 0.01) return;
-    const gr = g.createRadialGradient(x, y, 0, x, y, r);
-    gr.addColorStop(0, rgba(color, a)); gr.addColorStop(1, rgba(color, 0));
-    g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
-  }
   function dynamicMark(v) { return v < 0.14 ? 'pp' : v < 0.29 ? 'p' : v < 0.43 ? 'mp' : v < 0.57 ? 'mf' : v < 0.71 ? 'f' : v < 0.86 ? 'ff' : 'fff'; }
-  function draw(now) {
+  function draw(dt) {
     const ts = performance.now() / 1000;
-    g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
-    /* stage floor */
+    g.globalAlpha = 1; g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+    layerA = V.dim; g.globalAlpha = layerA;
     g.strokeStyle = rgba(COL.strings, 0.07 + V.energy * 0.22); g.lineWidth = 1;
     g.beginPath(); g.ellipse(CX, CY, 252, 252 * RY, 0, Math.PI * 1.04, Math.PI * 1.96); g.stroke();
     g.strokeStyle = rgba(COL.winds, 0.04 + V.energy * 0.1);
     g.beginPath(); g.ellipse(CX, CY, 150, 150 * RY, 0, Math.PI * 1.02, Math.PI * 1.98); g.stroke();
-    /* focus cursor */
     if (V.focus) {
       const s = SEC[V.focus], a0 = (s.angle - 26) * Math.PI / 180, a1 = (s.angle + 26) * Math.PI / 180;
       const pulse = 0.55 + 0.35 * Math.sin(ts * 3.2);
       g.strokeStyle = rgba(COL.strings, pulse); g.lineWidth = 2.5; g.lineCap = 'round';
       g.beginPath(); g.ellipse(CX, CY, 152, 152 * RY, 0, -a1, -a0); g.stroke();
-      const [gx, gy] = pos(s.angle, 200); halo(gx, gy, 70, COL.strings, 0.05 + 0.04 * pulse);
+      const [gx, gy] = pos(s.angle, 200); halo(gx, gy, 70, COL.strings, 0.06 + 0.04 * pulse);
     }
-    /* musicians */
     for (const m of musicians) {
       const color = COL[m.section]; const joined = !!V.joined[m.section]; const inten = V.intensity[m.section] ?? 0.5;
       let base = joined ? 0.3 + 0.5 * inten : 0.13 + 0.03 * Math.sin(ts * 1.1 + m.seed * 6);
+      if (V.solo_section && V.solo_section !== m.section) base *= 0.35;
       if (V.focus === m.section) base += 0.1;
       const a = base + m.lit * (1 - base);
       halo(m.x, m.y - 3, 14 + m.lit * 12 + (joined ? inten * 6 : 0), color, (joined ? 0.16 + inten * 0.2 : 0.04) + m.lit * 0.45);
       glyph(m, color, a);
     }
-    /* section labels */
     for (const [name, s] of Object.entries(SEC)) {
       const joined = !!V.joined[name], focused = V.focus === name;
       if (!joined && !focused) continue;
-      const [lx, ly] = pos(s.angle, 270); const color = COL[name];
-      const pulse = V.sectionPulse[name] || 0;
+      const [lx, ly] = pos(s.angle, 270); const color = COL[name]; const pulse = V.sectionPulse[name] || 0;
       g.font = '500 12px Manrope, system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
       try { g.letterSpacing = '2.5px'; } catch (_) {}
-      g.fillStyle = rgba(color, (focused ? 0.95 : 0.55) + pulse * 0.3);
-      g.fillText(s.label.toUpperCase(), lx, ly);
-      if (joined && V.chapter >= 3) {
+      g.fillStyle = rgba(color, (focused ? 0.95 : 0.55) + pulse * 0.3); g.fillText(s.label.toUpperCase(), lx, ly);
+      if (joined && V.chapter >= 4) {
         try { g.letterSpacing = '0px'; } catch (_) {}
         g.font = 'italic 500 17px "Cormorant Garamond", Georgia, serif'; g.fillStyle = rgba(COL.brass, focused ? 0.95 : 0.6);
         g.fillText(dynamicMark(V.intensity[name] ?? 0.5), lx, ly + 18);
       }
     }
     try { g.letterSpacing = '0px'; } catch (_) {}
-    /* soloist */
     {
-      const s = V.solo, awake = V.chapter >= 1; const c = COL.solo;
+      const s = V.solo, awake = V.chapter >= 1, c = COL.solo;
       const a = awake ? 0.5 + 0.5 * s.lit : 0.14 + 0.05 * Math.sin(ts * 1.6);
       halo(s.x, s.y - 4, 20 + s.lit * 30, COL.brass, (awake ? 0.14 : 0.05) + s.lit * 0.55);
       g.strokeStyle = rgba(c, a); g.fillStyle = rgba(c, a); g.lineWidth = 1.5; g.lineCap = 'round';
@@ -573,29 +878,23 @@ const Visual = (() => {
       for (let i = 0; i < 3; i++) { g.moveTo(s.x + 6 + i * 3.2, s.y - 10 + i * 2); g.lineTo(s.x + 6 + i * 3.2, s.y + 7); }
       g.moveTo(s.x + 5, s.y - 12); g.quadraticCurveTo(s.x + 14, s.y - 16, s.x + 13, s.y - 5); g.stroke();
     }
-    /* rings */
     for (const r of V.rings) { g.strokeStyle = rgba(r.color, r.a); g.lineWidth = r.width; g.beginPath(); g.arc(r.x, r.y, r.r, 0, TAU); g.stroke(); }
-    /* particles / light trails */
     g.lineCap = 'round';
     for (const p of V.parts) {
       const k = 1 - p.age / p.life; g.strokeStyle = rgba(p.color, k * 0.9); g.lineWidth = p.w * k;
       g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(p.x - p.vx * 0.09, p.y - p.vy * 0.09); g.stroke();
     }
-    /* energy arc */
     {
-      const r = 112, a0 = Math.PI, a1 = TAU;
-      g.strokeStyle = rgba(COL.winds, 0.09); g.lineWidth = 1.5;
-      g.beginPath(); g.arc(PIVOT.x, PIVOT.y, r, a0, a1); g.stroke();
+      const r = 112, a0 = Math.PI;
+      g.strokeStyle = rgba(COL.winds, 0.09); g.lineWidth = 1.5; g.beginPath(); g.arc(PIVOT.x, PIVOT.y, r, a0, TAU); g.stroke();
       if (V.energy > 0.005) {
         const grad = g.createLinearGradient(PIVOT.x - r, 0, PIVOT.x + r, 0);
         grad.addColorStop(0, rgba(COL.strings, 0.9)); grad.addColorStop(1, rgba(COL.brass, 0.9));
-        g.strokeStyle = grad; g.lineWidth = 2.5;
-        g.beginPath(); g.arc(PIVOT.x, PIVOT.y, r, a0, a0 + Math.PI * clamp(V.energy, 0, 1)); g.stroke();
+        g.strokeStyle = grad; g.lineWidth = 2.5; g.beginPath(); g.arc(PIVOT.x, PIVOT.y, r, a0, a0 + Math.PI * clamp(V.energy, 0, 1)); g.stroke();
       }
     }
-    /* baton with light trail */
     {
-      const awake = V.chapter >= 1; const n = V.trail.length;
+      const awake = V.chapter >= 1, n = V.trail.length;
       for (let i = 1; i < n; i++) {
         const k = i / n; g.strokeStyle = rgba(COL.strings, k * (0.08 + V.energy * 0.35)); g.lineWidth = 1 + k * 2;
         g.beginPath(); g.moveTo(V.trail[i - 1].x, V.trail[i - 1].y); g.lineTo(V.trail[i].x, V.trail[i].y); g.stroke();
@@ -603,33 +902,47 @@ const Visual = (() => {
       const tip = V.trail[n - 1] || { x: PIVOT.x, y: PIVOT.y - BATON };
       const grad = g.createLinearGradient(PIVOT.x, PIVOT.y, tip.x, tip.y);
       grad.addColorStop(0, rgba(COL.winds, awake ? 0.35 : 0.18)); grad.addColorStop(1, rgba(COL.winds, awake ? 0.95 : 0.4));
-      g.strokeStyle = grad; g.lineWidth = 2.4; g.lineCap = 'round';
-      g.beginPath(); g.moveTo(PIVOT.x, PIVOT.y); g.lineTo(tip.x, tip.y); g.stroke();
+      g.strokeStyle = grad; g.lineWidth = 2.4; g.beginPath(); g.moveTo(PIVOT.x, PIVOT.y); g.lineTo(tip.x, tip.y); g.stroke();
       halo(tip.x, tip.y, 10 + V.energy * 10 + V.flick * 14, COL.winds, (awake ? 0.35 : 0.12) + V.flick * 0.5);
       g.fillStyle = rgba(COL.brass, awake ? 0.8 : 0.35); g.beginPath(); g.arc(PIVOT.x, PIVOT.y, 3, 0, TAU); g.fill();
     }
-    /* chapter progression */
-    for (let i = 0; i < 5; i++) {
-      const x = 300 + (i - 2) * 14, y = 52; const ch = i + 1;
+    if (V.burst > 0) halo(V.solo.x, V.solo.y, 40 + (1 - V.burst) * 420, COL.brass, V.burst * 0.35);
+    /* chrome that is never dimmed: progress dots, gesture guide */
+    layerA = 1; g.globalAlpha = 1;
+    for (let i = 0; i < 6; i++) {
+      const x = 300 + (i - 2.5) * 14, y = 52, ch = i + 1;
       let color = COL.winds, a = 0.22, r = 2;
       if (ch < V.chapter || V.finished) { color = COL.brass; a = 0.85; }
       else if (ch === V.chapter) { color = COL.strings; a = 0.6 + 0.4 * Math.sin(ts * 3); r = 2.6; }
       g.fillStyle = rgba(color, a); g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
     }
-    /* completion glow */
-    if (V.burst > 0) halo(V.solo.x, V.solo.y, 40 + (1 - V.burst) * 420, COL.brass, V.burst * 0.35);
+    Gestures.draw(g, dt);
   }
   function frame(ts) {
     requestAnimationFrame(frame);
     const dt = clamp((ts - last) / 1000 || 0.016, 0.001, 0.05); last = ts;
     const ctx = Audio.ctx(); const now = ctx ? ctx.currentTime : 0;
-    if (ctx) { const q = V.queue; let i = 0; while (i < q.length) { if (q[i].t <= now + 0.012) { trigger(q[i]); q.splice(i, 1); } else i++; } }
-    update(dt, now); draw(now);
+    if (ctx) { const q = V.queue; let i = 0; while (i < q.length) { if (q[i].t <= now + 0.012) { trigger(q[i]); q.splice(i, 1); } else i++; } if (q.length > 400) q.splice(0, q.length - 400); }
+    update(dt, now); draw(dt);
   }
   return {
     init, ring, spawn, state: V, queue: V.queue, COL,
     cue(color = COL.solo) { ring(V.solo.x, V.solo.y, color); },
-    reset() { V.queue.length = 0; V.rings = []; V.parts = []; V.solo.lit = 0; V.flick = 0; V.focus = null; V.joined = {}; V.intensity = {}; V.energy = 0; V.chapter = 0; V.burst = 0; V.finished = false; V.sectionPulse = {}; for (const m of musicians) m.lit = 0; }
+    reset() { V.queue.length = 0; V.rings = []; V.parts = []; V.solo.lit = 0; V.flick = 0; V.focus = null; V.joined = {}; V.intensity = {}; V.energy = 0; V.chapter = 0; V.burst = 0; V.finished = false; V.sectionPulse = {}; V.dimTarget = 1; V.solo_section = null; for (const m of musicians) m.lit = 0; }
+  };
+})();
+
+/* ---------------- Nav ---------------- */
+/* The docs say the Back gesture arrives as Escape or as history.back(). When a popup
+   opens we add ONE history entry; if the system goes back through history, popstate
+   fires and we close the popup instead of leaving the app. We never call
+   history.back() ourselves, so a Back can never be applied twice. */
+const Nav = (() => {
+  let depth = 0;
+  return {
+    ensure() { if (depth) return; try { history.pushState({ conductor: VERSION }, ''); depth = 1; } catch (_) {} },
+    get depth() { return depth; },
+    init() { window.addEventListener('popstate', () => { if (!depth) return; depth = 0; Log.add('history back → Back'); Input.dispatch('back', undefined, 'history'); }); }
   };
 })();
 
@@ -643,7 +956,7 @@ const Input = (() => {
   const I = { dragEnabled: false, dragThreshold: 8 };
   function emit(action, src, data) {
     const now = performance.now();
-    if (action !== 'drag' && last[action] && now - last[action] < MIN_GAP) { Log.add(`ignored rapid ${action}`); return; }
+    if (action !== 'drag' && last[action] && now - last[action] < MIN_GAP) { Log.add(`ignored rapid ${action} (${src})`); return; }
     last[action] = now; listeners.forEach(fn => fn(action, src, data));
   }
   function onKey(e) {
@@ -651,8 +964,7 @@ const Input = (() => {
     if (e.key === 'd' || e.key === 'D') { Dev.toggle(); e.preventDefault(); return; }
     const a = MAP[e.key]; if (!a) return;
     e.preventDefault();
-    if (e.repeat) return;
-    if (held.has(e.key)) return;
+    if (e.repeat || held.has(e.key)) return;
     held.add(e.key); setTimeout(() => held.delete(e.key), 700);
     emit(a, 'key');
   }
@@ -672,8 +984,8 @@ const Input = (() => {
       el.addEventListener('pointerdown', onDown); el.addEventListener('pointermove', onMove);
       el.addEventListener('pointerup', onUp); el.addEventListener('pointercancel', onUp);
     },
-    /* programmatic entry point used by tests; goes through the same guards */
-    dispatch(action, data) { emit(action, 'api', data); }
+    /* programmatic entry point used by tests and history back; goes through the same guards */
+    dispatch(action, data, src = 'api') { emit(action, src, data); }
   };
 })();
 
@@ -681,33 +993,29 @@ const Input = (() => {
 const Game = (() => {
   const SECTIONS = ['strings', 'winds', 'brass'];
   const NAME = { strings: 'strings', winds: 'woodwinds', brass: 'brass' };
-  const CH = [
-    { eyebrow: 'Overture',                          legend: ['Pinch'] },
-    { eyebrow: 'Chapter I · The First Note',        legend: ['Pinch · next note'] },
-    { eyebrow: 'Chapter II · Find Your Orchestra',  legend: ['◀ ▶ Choose a section', 'Pinch · bring it in'] },
-    { eyebrow: 'Chapter III · Shape the Music',     legend: ['◀ ▶ Section', '▲ ▼ Dynamics'] },
-    { eyebrow: 'Chapter IV · Conduct the Tempo',    legend: ['▲ ▼ Tempo', 'Pinch & drag · sweep the tempo'] },
-    { eyebrow: 'Chapter V · The Finale',            legend: ['Pinch · cue', '◀ ▶ Section', '▲ ▼ Dynamics'] }
-  ];
-  const G = { chapter: 0, focus: 0, melodyIndex: 0, joined: {}, intensity: { strings: 0.5, winds: 0.5, brass: 0.5 },
-              finalePhase: 0, confirm: false, ended: false, timers: [], prevPrompt: '', challengeDone: false, cued: false };
-  const el = { eyebrow: $('#eyebrow'), prompt: $('#prompt'), legend: $('#legend'), readout: $('#readout'), wordmark: $('#wordmark'), tagline: $('#tagline'), bravo: $('#bravo') };
-  const later = (fn, ms) => { const id = setTimeout(fn, ms); G.timers.push(id); };
+  const LABEL = { strings: 'Strings', winds: 'Woodwinds', brass: 'Brass' };
+  const CH = ['Overture', 'Chapter I · The First Note', 'Chapter II · Find Your Orchestra', 'Chapter III · Step Back',
+              'Chapter IV · Shape the Music', 'Chapter V · Conduct the Tempo', 'Chapter VI · The Finale'];
+  const HINT_MS = 7000;
+  const fresh = () => ({ chapter: 0, focus: 0, melodyIndex: 0, joined: {}, intensity: { strings: 0.5, winds: 0.5, brass: 0.5 },
+    finalePhase: 0, ended: false, timers: [], challengeDone: false, cued: false, resolveReady: false, busy: false,
+    card: null, backCount: 0, pause: false, saved: null, lastInput: performance.now() });
+  const G = fresh();
+  const el = { eyebrow: $('#eyebrow'), prompt: $('#prompt'), readout: $('#readout'), wordmark: $('#wordmark'), tagline: $('#tagline'), bravo: $('#bravo'),
+               card: $('#card'), cardK: $('#cardK'), cardT: $('#cardT'), cardB: $('#cardB'), pause: $('#pause') };
+  /* timers wait while the pause popup is open */
+  const later = (fn, ms) => { const run = () => { if (G.pause) { G.timers.push(setTimeout(run, 400)); return; } fn(); }; G.timers.push(setTimeout(run, ms)); };
   const clearTimers = () => { G.timers.forEach(clearTimeout); G.timers = []; };
   const focusName = () => SECTIONS[G.focus];
   const tempoMark = bpm => bpm < 72 ? 'Adagio' : bpm < 92 ? 'Andante' : bpm < 108 ? 'Moderato' : bpm < 130 ? 'Allegro' : 'Vivace';
+  const show = (e, on) => { if (on) { e.hidden = false; requestAnimationFrame(() => e.classList.add('show')); } else { e.classList.remove('show'); setTimeout(() => { if (!e.classList.contains('show')) e.hidden = true; }, 320); } };
 
   function prompt(html, instant) {
     if (instant) { el.prompt.classList.remove('swap'); el.prompt.innerHTML = html; return; }
     el.prompt.classList.add('swap');
     later(() => { el.prompt.innerHTML = html; el.prompt.classList.remove('swap'); }, 220);
   }
-  function legend(items) { el.legend.innerHTML = items.map(s => `<span>${s}</span>`).join(''); }
-  function readout() {
-    if (G.chapter < 2) { el.readout.innerHTML = ''; return; }
-    const parts = [`♩ <b>${Math.round(Clock.bpm)}</b> ${tempoMark(Clock.bpm)}`];
-    el.readout.innerHTML = parts.join('');
-  }
+  function readout() { el.readout.innerHTML = G.chapter < 2 ? '' : `♩ <b>${Math.round(Clock.bpm)}</b> ${tempoMark(Clock.bpm)}`; }
   function energy() {
     const joined = SECTIONS.filter(s => G.joined[s]);
     const e = joined.length ? joined.reduce((a, s) => a + G.intensity[s], 0) / SECTIONS.length : 0;
@@ -718,12 +1026,26 @@ const Game = (() => {
     Visual.state.chapter = G.chapter; Visual.state.joined = { ...G.joined }; Visual.state.intensity = { ...G.intensity };
     Visual.state.focus = G.chapter >= 2 && !G.ended ? focusName() : null; energy(); readout();
   }
-  function enter(n) {
-    G.chapter = n; el.eyebrow.textContent = CH[n].eyebrow; legend(CH[n].legend);
-    Input.dragEnabled = n >= 4; syncVisual(); Log.add(`→ ${CH[n].eyebrow}`);
+  function enter(n, dock) {
+    G.chapter = n; G.busy = false; el.eyebrow.textContent = CH[n]; Gestures.setDock(dock);
+    Input.dragEnabled = n >= 5; G.lastInput = performance.now(); syncVisual(); Log.add(`→ ${CH[n]}`);
+  }
+  /* which gesture moves the lesson forward right now (drives hints) */
+  function expected() {
+    if (G.busy || G.pause) return null;
+    if (G.ended) return 'pinch';
+    switch (G.chapter) {
+      case 0: case 1: return G.melodyIndex < 8 ? 'pinch' : null;
+      case 2: return G.joined[focusName()] ? 'swipeLR' : 'pinch';
+      case 3: return G.card ? 'back' : 'pinch';
+      case 4: return G.joined[focusName()] && G.intensity[focusName()] < 1 ? 'swipeUD' : 'swipeLR';
+      case 5: return 'drag';
+      case 6: return G.cued && !G.resolveReady ? null : 'pinch';
+    }
+    return null;
   }
 
-  /* ---- Chapter 1: one gesture, one note ---- */
+  /* ---- Chapter I: one gesture, one note ---- */
   function playMelodyNote() {
     const ctx = Audio.ensure(); if (!ctx) return;
     const m = Score.melody[G.melodyIndex]; const t = ctx.currentTime + 0.01;
@@ -734,158 +1056,209 @@ const Game = (() => {
   }
   function firstCue() {
     el.wordmark.classList.add('gone'); el.tagline.classList.add('gone');
-    playMelodyNote(); enter(1);
+    playMelodyNote(); enter(1, [{ key: 'pinch', label: 'Next note' }]);
     prompt('Pinch again.<br>Each cue adds the next note.');
   }
   function melodyComplete() {
     const ctx = Audio.ctx(); const at = ctx.currentTime + 0.55;
     Layers.layers.solo.joined = true; Layers.layers.solo.joinStep = 0;
-    Clock.start(at);
+    Clock.start(at); G.busy = true;
     prompt('That melody is yours.<br>Listen — it plays on.');
-    later(() => enter2(), 5200);
+    later(enter2, 5200);
   }
-  /* ---- Chapter 2 ---- */
+  /* ---- Chapter II: swipe to navigate ---- */
   function enter2() {
-    enter(2); G.focus = 0; syncVisual();
-    prompt('Swipe left or right to find a section.<br>Pinch to bring it in.');
+    enter(2, [{ key: 'swipeLR', label: 'Choose section' }, { key: 'pinch', label: 'Bring it in' }]); G.focus = 0; syncVisual();
+    Gestures.teach('swipeLR');
+    prompt('Swipe to find a section.<br>Pinch to bring it in.');
   }
-  function moveFocus(dir) {
-    G.focus = (G.focus + dir + SECTIONS.length) % SECTIONS.length; syncVisual();
-    Log.add(`focus → ${focusName()}`);
-  }
+  function moveFocus(dir) { G.focus = (G.focus + dir + SECTIONS.length) % SECTIONS.length; syncVisual(); Log.add(`focus → ${focusName()}`); }
   function joinFocused() {
     const s = focusName();
     if (G.joined[s]) { Visual.cue(Visual.COL[s]); return; }
     G.joined[s] = true; Audio.setIntensity(s, G.intensity[s]); Layers.join(s);
     Visual.cue(Visual.COL[s]); syncVisual();
     const count = SECTIONS.filter(x => G.joined[x]).length;
-    if (count === SECTIONS.length) {
-      prompt('Your orchestra is complete.');
-      later(() => enter3(), 3600);
-    } else {
+    if (count === SECTIONS.length) { G.busy = true; prompt('Your orchestra is complete.'); later(enter3, 3600); }
+    else {
       const left = SECTIONS.filter(x => !G.joined[x]).map(x => NAME[x]);
-      prompt(`The ${NAME[s]} have joined.<br>${count === 1 ? 'Two sections' : 'One section'} still waiting: <em>${left.join(' and ')}</em>.`);
+      prompt(`The ${NAME[s]} have joined.<br>Still waiting: <em>${left.join(' and ')}</em>.`);
     }
   }
-  /* ---- Chapter 3 ---- */
+  /* ---- Chapter III: Back ---- */
   function enter3() {
-    enter(3); G.challengeDone = false; G.focus = 0; syncVisual();
-    prompt('Swipe up to raise the <em>strings</em>.<br>Build the crescendo, step by step.');
+    enter(3, [{ key: 'swipeLR', label: 'Section' }, { key: 'pinch', label: 'Open card' }]); G.backCount = 0;
+    Gestures.pulse('pinch');
+    prompt('Pinch to open a section’s card.<br>Then learn how to close it.');
+  }
+  function openCard() {
+    const s = focusName(); G.card = s; Nav.ensure();
+    const ctx = Audio.ctx(); const t = ctx.currentTime + 0.01;
+    for (const o of [...SECTIONS, 'solo']) if (o !== s) Audio.setDuck(o, 0.12);
+    Audio.playSolo(81, t, 0.32); Visual.queue.push({ t, section: s, midi: 81, vel: 0.6 }); Visual.cue(Visual.COL[s]);
+    Visual.state.solo_section = s; Visual.state.dimTarget = 0.55;
+    el.cardK.textContent = LABEL[s]; el.cardT.textContent = `${LABEL[s]} alone`; el.cardB.textContent = 'Only this section is playing now.';
+    show(el.card, true);
+    Gestures.setDock([{ key: 'back', label: 'Close card' }]);
+    if (G.backCount === 0) { Gestures.teach('back'); prompt('<em>Back</em> closes what you opened<br>and returns you one step.'); }
+    else prompt('Now close it with <em>Back</em>.');
+    Log.add(`card opened: ${s}`);
+  }
+  function closeCard() {
+    const s = G.card; G.card = null;
+    const ctx = Audio.ctx(); const t = ctx.currentTime + 0.01;
+    for (const o of [...SECTIONS, 'solo']) Audio.setDuck(o, 1, 0.2);
+    Audio.playSolo(78, t, 0.28); Audio.playSolo(74, t + 0.1, 0.3); Visual.queue.push({ t, section: 'solo', midi: 74, vel: 0.5 }); Visual.cue();
+    Visual.state.solo_section = null; Visual.state.dimTarget = 1;
+    show(el.card, false); G.backCount++; Log.add(`card closed: ${s} (${G.backCount})`);
+    if (G.backCount === 1) {
+      Gestures.setDock([{ key: 'swipeLR', label: 'Section' }, { key: 'pinch', label: 'Open' }, { key: 'back', label: 'Close' }]);
+      prompt('That is <em>Back</em> — one step out.<br>Once more on your own: open, then close.');
+    } else {
+      G.busy = true; Gestures.setDock([{ key: 'pinch', label: 'Go in' }, { key: 'back', label: 'Come out' }]);
+      prompt('Pinch goes in. <em>Back</em> comes out.');
+      later(enter4, 3600);
+    }
+  }
+  /* ---- Pause popup: Back from the main stage ---- */
+  function openPause() {
+    G.pause = true; Nav.ensure(); Audio.duckAll(0.3); Visual.state.dimTarget = 0.25;
+    G.saved = { prompt: el.prompt.innerHTML }; el.prompt.classList.add('swap');
+    show(el.pause, true); Gestures.hold(true); Gestures.setExtra([{ key: 'pinch', x: 204, y: 282 }, { key: 'back', x: 204, y: 346 }]);
+    G.savedDock = G.dockCache; Gestures.setDock([]); Log.add('pause opened');
+  }
+  function closePause() {
+    G.pause = false; Audio.duckAll(1); Visual.state.dimTarget = G.card ? 0.55 : 1;
+    show(el.pause, false); Gestures.hold(false); Gestures.setExtra([]); el.prompt.innerHTML = G.saved.prompt; el.prompt.classList.remove('swap');
+    Gestures.setDock(G.savedDock || []); Log.add('pause closed');
+  }
+  /* ---- Chapter IV ---- */
+  function enter4() {
+    enter(4, [{ key: 'swipeLR', label: 'Section' }, { key: 'swipeUD', label: 'Dynamics' }]); G.challengeDone = false; G.focus = 0; syncVisual();
+    Gestures.teach('swipeUD');
+    prompt('Swipe up to raise the <em>strings</em>.<br>Build the crescendo.');
   }
   function adjustIntensity(dir) {
     const s = focusName(); if (!G.joined[s]) return;
     const v = clamp(Math.round((G.intensity[s] + dir * 0.125) * 1000) / 1000, 0, 1);
     if (v === G.intensity[s]) { Visual.cue(Visual.COL[s]); return; }
     G.intensity[s] = v; Audio.setIntensity(s, v); Visual.cue(Visual.COL[s]);
-    Visual.state.sectionPulse[s] = 1; syncVisual();
-    Log.add(`${s} intensity → ${v.toFixed(3)}`);
-    if (G.chapter === 3 && !G.challengeDone) {
-      const e = energy();
-      if (e >= 0.78) {
-        G.challengeDone = true; prompt('<em>Fortissimo.</em> The hall is full.');
-        later(() => enter4(), 3400);
-      } else if (v >= 0.99) {
+    Visual.state.sectionPulse[s] = 1; syncVisual(); Log.add(`${s} intensity → ${v.toFixed(3)}`);
+    if (G.chapter === 4 && !G.challengeDone) {
+      if (energy() >= 0.78) { G.challengeDone = true; G.busy = true; prompt('<em>Fortissimo.</em> The hall is full.'); later(enter5, 3400); }
+      else if (v >= 0.99) {
         const next = SECTIONS.find(x => G.intensity[x] < 0.9);
-        if (next) prompt(`Now the <em>${NAME[next]}</em>.<br>Swipe ${SECTIONS.indexOf(next) > G.focus ? 'right' : 'left'} to find them, then up.`);
+        if (next) prompt(`Now the <em>${NAME[next]}</em>.<br>Swipe ${SECTIONS.indexOf(next) > G.focus ? 'right' : 'left'}, then up.`);
       }
     }
   }
-  /* ---- Chapter 4 ---- */
-  function enter4() {
-    enter(4); G.challengeDone = false; syncVisual();
-    prompt('Swipe up to quicken the tempo.<br>Bring the orchestra to <em>Allegro</em>.');
+  /* ---- Chapter V ---- */
+  function enter5() {
+    enter(5, [{ key: 'drag', label: 'Sweep tempo' }, { key: 'swipeUD', label: 'Tempo' }]); G.challengeDone = false; syncVisual();
+    Gestures.teach('drag');
+    prompt('Pinch, hold, and move your hand right<br>to bring the orchestra to <em>Allegro</em>.');
   }
   function setTempo(v, silent) {
     const before = Clock.bpm; Clock.bpm = v;
     if (Clock.bpm !== before) { syncVisual(); if (!silent) Log.add(`tempo → ${Clock.bpm.toFixed(1)} bpm`); }
-    if (G.chapter === 4 && !G.challengeDone && Clock.bpm >= 108) {
-      G.challengeDone = true; prompt('<em>Allegro.</em> Your orchestra follows every move.');
-      later(() => enter5(), 3400);
+    if (G.chapter === 5 && !G.challengeDone && Clock.bpm >= 108) {
+      G.challengeDone = true; G.busy = true; prompt('<em>Allegro.</em> Your orchestra follows every move.'); later(enter6, 3400);
     }
   }
-  /* ---- Chapter 5 ---- */
-  function enter5() {
-    enter(5); G.finalePhase = 1; G.cued = false; Layers.setMode('finale'); Layers.setPhase(1); syncVisual();
+  /* ---- Chapter VI: finale ---- */
+  function enter6() {
+    enter(6, [{ key: 'pinch', label: 'Cue' }, { key: 'swipeLR', label: 'Section' }, { key: 'swipeUD', label: 'Dynamics' }]);
+    G.finalePhase = 1; G.cued = false; Layers.setMode('finale'); Layers.setPhase(1); syncVisual();
     prompt('The finale begins.<br>Pinch to cue the full orchestra.');
   }
-  function cueFinale() {
-    if (G.cued) return; G.cued = true;
-    G.joined.perc = true; Layers.join('perc'); Layers.setPhase(2); Visual.cue(Visual.COL.brass);
-    prompt('The orchestra gathers…');
-  }
-  function onPhase(p, t) {
+  function cueFinale() { if (G.cued) return; G.cued = true; G.joined.perc = true; Layers.join('perc'); Layers.setPhase(2); Visual.cue(Visual.COL.brass); prompt('The orchestra gathers…'); }
+  function onPhase(p) {
     G.finalePhase = p; syncVisual();
-    if (p === 2) { later(() => { prompt('Everything you learned, in one movement.<br>Pinch to bring it home.'); G.cued = false; G.resolveReady = true; }, 900); }
+    if (p === 2) later(() => { prompt('Everything you learned, in one movement.<br>Pinch to bring it home.'); G.resolveReady = true; }, 900);
   }
-  function resolve() {
-    if (!G.resolveReady) return; G.resolveReady = false; G.cued = true;
-    Layers.resolve(); Visual.cue(Visual.COL.solo); prompt('');
-  }
+  function resolve() { if (!G.resolveReady) return; G.resolveReady = false; G.cued = true; G.busy = true; Layers.resolve(); Visual.cue(Visual.COL.solo); prompt(''); }
   function onFinalChord(t) {
     const ctx = Audio.ctx(); const delay = Math.max(0, (t - ctx.currentTime) * 1000);
     later(() => {
       el.bravo.classList.add('show'); G.ended = true; syncVisual(); Log.add('performance complete');
-      later(() => { el.bravo.classList.remove('show'); prompt('Your first note became a whole orchestra.<br>Pinch to conduct again.'); legend(['Pinch · conduct again']); }, 4200);
+      Gestures.setDock([]);
+      later(() => { el.bravo.classList.remove('show'); G.busy = false; G.lastInput = performance.now(); prompt('Your first note became a whole orchestra.<br>Pinch to conduct again.'); Gestures.setDock([{ key: 'pinch', label: 'Conduct again' }]); }, 4200);
     }, delay + 60);
   }
   /* ---- restart ---- */
   function reset() {
-    clearTimers(); Clock.reset(); Audio.shutdown(); Layers.reset(); Visual.reset();
-    Object.assign(G, { chapter: 0, focus: 0, melodyIndex: 0, joined: {}, intensity: { strings: 0.5, winds: 0.5, brass: 0.5 },
-                       finalePhase: 0, confirm: false, ended: false, challengeDone: false, cued: false, resolveReady: false });
+    clearTimers(); Clock.reset(); Audio.shutdown(); Layers.reset(); Visual.reset(); Gestures.reset();
+    Object.assign(G, fresh());
     el.bravo.classList.remove('show'); el.wordmark.classList.remove('gone'); el.tagline.classList.remove('gone');
-    enter(0); prompt('Your orchestra is waiting.<br>Pinch once to give your first cue.', true);
+    show(el.card, false); show(el.pause, false);
+    enter(0, []); Gestures.teach('pinch'); prompt('Your orchestra is waiting.<br>Pinch once to give your first cue.', true);
     Log.add('restarted — silent until the next pinch');
   }
-  function askRestart() {
-    G.confirm = true; G.prevPrompt = el.prompt.innerHTML; G.prevLegend = el.legend.innerHTML;
-    prompt('Start over?<br>Pinch to confirm · swipe back to keep playing', true); legend(['Pinch · restart', 'Back · cancel']);
-  }
-  function cancelRestart() { G.confirm = false; el.prompt.innerHTML = G.prevPrompt; el.legend.innerHTML = G.prevLegend; }
 
   function onAction(a, src, data) {
-    if (G.confirm) { if (a === 'select') reset(); else if (a === 'back') cancelRestart(); return; }
-    if (a === 'back') { if (G.chapter >= 1 && !G.ended) askRestart(); return; }
-    if (G.ended) { if (a === 'select') reset(); return; }
+    G.lastInput = performance.now();
+    if (!G.pause) Gestures.input(a); else Gestures.flashOnly(a);
+    if (G.pause) { if (a === 'select') reset(); else if (a === 'back') closePause(); return; }
+    if (a === 'back') {
+      if (G.card) closeCard();
+      else if (G.chapter >= 1 && !G.ended) openPause();
+      return;
+    }
+    if (G.ended) { if (a === 'select' && !G.busy) reset(); return; }
+    const exp = expected();
     switch (G.chapter) {
-      case 0: if (a === 'select') firstCue(); break;
+      case 0: if (a === 'select') firstCue(); else Gestures.pulse('pinch'); return;
       case 1:
-        if (a === 'select') {
-          if (G.melodyIndex < Score.melody.length) { playMelodyNote(); if (G.melodyIndex === Score.melody.length) melodyComplete(); }
-        }
+        if (a === 'select' && G.melodyIndex < Score.melody.length) { playMelodyNote(); if (G.melodyIndex === Score.melody.length) melodyComplete(); }
         break;
       case 2:
         if (a === 'left') moveFocus(-1); else if (a === 'right') moveFocus(1); else if (a === 'select') joinFocused();
         break;
       case 3:
+        if (G.card) { Gestures.pulse('back'); if (a !== 'back' && G.backCount === 0 && !Gestures.showing()) Gestures.teach('back', { hint: true }); return; }
+        if (a === 'left') moveFocus(-1); else if (a === 'right') moveFocus(1); else if (a === 'select' && !G.busy) openCard();
+        break;
+      case 4:
         if (a === 'left') moveFocus(-1); else if (a === 'right') moveFocus(1);
         else if (a === 'up') adjustIntensity(1); else if (a === 'down') adjustIntensity(-1);
         else if (a === 'select') Visual.cue(Visual.COL[focusName()]);
         break;
-      case 4:
+      case 5:
         if (a === 'up') setTempo(Clock.bpm + 4); else if (a === 'down') setTempo(Clock.bpm - 4);
         else if (a === 'drag') setTempo(Clock.bpm + data * 0.22, true); else if (a === 'dragend') Log.add(`drag ended · ${Clock.bpm.toFixed(1)} bpm`);
         else if (a === 'left') moveFocus(-1); else if (a === 'right') moveFocus(1);
         break;
-      case 5:
+      case 6:
         if (a === 'select') { if (G.resolveReady) resolve(); else cueFinale(); }
         else if (a === 'left') moveFocus(-1); else if (a === 'right') moveFocus(1);
         else if (a === 'up') adjustIntensity(1); else if (a === 'down') adjustIntensity(-1);
         else if (a === 'drag') setTempo(Clock.bpm + data * 0.22, true);
         break;
     }
+    /* a gesture that did not move the lesson forward: nudge the one that will */
+    const g = Gestures.ACTION[a];
+    if (exp && g && g !== exp && !(exp === 'drag' && g === 'swipeUD')) Gestures.pulse(exp);
+  }
+  function idleCheck() {
+    const exp = expected();
+    if (!exp || Gestures.showing()) return;
+    if (performance.now() - G.lastInput > HINT_MS) { Gestures.teach(exp, { hint: true }); G.lastInput = performance.now(); }
   }
   return {
-    state: G, onPhase, onFinalChord, reset,
+    state: G, onPhase, onFinalChord, reset, expected,
     start() {
-      Visual.init($('#c')); Input.init($('#stage')); Input.on(onAction); enter(0);
+      /* cache the current dock so the pause popup can restore it */
+      const sd = Gestures.setDock; Gestures.setDock = items => { if (!G.pause) G.dockCache = items; sd(items); };
+      Visual.init($('#c')); Input.init($('#stage')); Nav.init(); Input.on(onAction);
+      enter(0, []); Gestures.teach('pinch');
+      setInterval(idleCheck, 500);
       document.addEventListener('visibilitychange', () => {
-        if (document.hidden) { Clock.pause(); Audio.suspend(); }
-        else { Audio.resume(); Clock.resume(); }
+        Log.add(`visibility → ${document.visibilityState}`);
+        if (document.hidden) { Clock.pause(); Audio.suspend(); } else { Audio.resume(); Clock.resume(); }
       });
       window.addEventListener('pagehide', () => { Clock.stop(); Audio.shutdown(); });
       $('#stage').focus({ preventScroll: true });
-      Log.add('ready · silent · waiting for the first pinch');
+      Log.add(`v${VERSION} ready · silent · waiting for the first pinch`);
     }
   };
 })();
@@ -894,37 +1267,23 @@ const Game = (() => {
 const Dev = (() => {
   const box = $('#dev'); let on = false, timer = null;
   function render() {
-    const ctx = Audio.ctx(); const L = Layers.layers; const G = Game.state;
-    const lines = [];
-    lines.push(`<h4>Audio</h4>`);
-    lines.push(ctx ? `context: ${ctx.state} · ${ctx.sampleRate} Hz\nnow: ${ctx.currentTime.toFixed(3)}s` : 'context: none (created on first pinch)');
-    lines.push(`user-triggered notes: ${Audio.stats.userNotes}\nscheduled voices: ${Audio.stats.scheduledNotes}`);
-    lines.push(`<h4>Clock</h4>`);
-    lines.push(Clock.running ? `running · ${Clock.bpm.toFixed(1)} bpm\nstep ${Clock.step} · bar ${Math.floor(Clock.step / 16)} · pos ${Clock.step % 16}\nstep = ${(Clock.stepDur() * 1000).toFixed(1)} ms` : 'stopped');
-    lines.push(`<h4>Layers (same step → same time)</h4>`);
-    for (const [n, l] of Object.entries(L)) {
-      lines.push(`${n.padEnd(8)} ${l.joined ? 'on ' : 'off'} join@${String(l.joinStep).padStart(4)} last ${String(l.lastStep).padStart(4)} @${l.lastT.toFixed(3)}`);
-    }
-    const lastSteps = Object.values(L).filter(l => l.joined && l.lastStep >= 0);
-    if (lastSteps.length > 1) {
-      const maxStep = Math.max(...lastSteps.map(l => l.lastStep));
-      const ok = lastSteps.every(l => maxStep - l.lastStep <= 16);
-      lines.push(`sync: ${ok ? 'all layers within one bar of the head' : 'DRIFT'}`);
-    }
-    lines.push(`<h4>Game</h4>chapter ${G.chapter} · focus ${['strings', 'winds', 'brass'][G.focus]} · melody ${G.melodyIndex}/8\nintensity S ${G.intensity.strings.toFixed(2)} W ${G.intensity.winds.toFixed(2)} B ${G.intensity.brass.toFixed(2)}`);
-    lines.push(`<h4>Log</h4>` + Log.lines.slice(-14).join('\n'));
+    const ctx = Audio.ctx(); const L = Layers.layers; const G = Game.state; const st = Audio.stats;
+    const lines = [`<h4>CONDUCTOR v${VERSION}</h4>`];
+    lines.push(ctx ? `audio: ${ctx.state} · ${ctx.sampleRate} Hz` + (ctx.baseLatency ? `\nlatency: base ${(ctx.baseLatency * 1000).toFixed(0)} ms` + (ctx.outputLatency ? ` · out ${(ctx.outputLatency * 1000).toFixed(0)} ms` : '') : '') : 'audio: none (created on first pinch)');
+    lines.push(`sources allocated ${st.active} · peak ${st.peak}\n(incl. ${Clock.lookahead * 1000} ms scheduled ahead) · stolen ${st.stolen}\nuser notes ${st.userNotes} · scheduled ${st.scheduledNotes}\nlate notes max ${st.maxLateMs.toFixed(1)} ms`);
+    lines.push(`<h4>Clock</h4>` + (Clock.running ? `${Clock.bpm.toFixed(1)} bpm · step ${Clock.step} · bar ${Math.floor(Clock.step / 16)}\nlookahead ${Clock.lookahead * 1000} ms · max timer gap ${Clock.maxGapMs.toFixed(0)} ms\nresyncs ${Clock.resyncs}` : 'stopped'));
+    lines.push(`<h4>Layers</h4>`);
+    for (const [n, l] of Object.entries(L)) lines.push(`${n.padEnd(8)} ${l.joined ? 'on ' : 'off'} last ${String(l.lastStep).padStart(4)} @${l.lastT.toFixed(3)}`);
+    lines.push(`<h4>Game</h4>ch ${G.chapter} · focus ${['strings', 'winds', 'brass'][G.focus]} · expects ${Game.expected() || '—'}\ncard ${G.card || '—'} · pause ${G.pause} · back ${G.backCount}`);
+    lines.push(`<h4>Log</h4>` + Log.lines.slice(-11).join('\n'));
     box.innerHTML = lines.join('\n');
   }
-  return {
-    dirty: false,
-    toggle(force) { on = force === undefined ? !on : force; box.hidden = !on; clearInterval(timer); if (on) { render(); timer = setInterval(render, 200); } },
-    get on() { return on; }
-  };
+  return { toggle(force) { on = force === undefined ? !on : force; box.hidden = !on; clearInterval(timer); if (on) { render(); timer = setInterval(render, 250); } }, get on() { return on; } };
 })();
 
 Game.start();
 if (location.hash === '#dev') Dev.toggle(true);
-window.CONDUCTOR = { Audio, Clock, Layers, Visual, Input, Game, Log, Score, Dev, version: '0.1.0' };
+window.CONDUCTOR = { Audio, Clock, Layers, Visual, Gestures, Nav, Input, Game, Log, Score, Dev, version: VERSION };
 </script>
 </body>
 </html>

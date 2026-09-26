@@ -3,214 +3,129 @@
 *One gesture begins a note. Every gesture brings your orchestra to life.*
 
 A standalone Web App (single `index.html`, no build step, no dependencies) that teaches the
-Meta Ray-Ban Display control actions by turning the wearer into the conductor of an orchestra.
-Every supported gesture produces an immediate musical response; the melody played by the very
-first pinch grows into a full orchestral movement.
+Meta Ray-Ban Display / Meta Neural Band control gestures by turning the wearer into the
+conductor of an orchestra. An animated hand shows each gesture as it is introduced, every
+gesture produces an immediate musical response, and the melody played by the very first
+pinch grows into a full orchestral movement.
 
-## Files
+Version: **0.2.0** (shown in the dev overlay).
 
-| File | Purpose |
-|---|---|
-| `index.html` | The complete app. Host this file at a public HTTPS URL for the glasses. |
-| `README.md` | This document. |
+## What changed in 0.2
 
-## Running it on a desktop browser
+**Audio no longer breaks up on the glasses.** In 0.1 the finale reached 174 simultaneous
+sound sources, and the engine rendered only 2.7× faster than real time on a desktop CPU,
+with digital clipping (peak 1.17). The glasses' processor could not keep up once more
+sections joined. Measured with the same finale in an offline render:
 
-Open `index.html` directly (double-click) or serve it locally, e.g. `npx serve .` or
-`python3 -m http.server 8000`, then open `http://localhost:8000/`. Chrome is the reference
-browser (the glasses runtime and the official simulator are both Chromium-based).
-
-Keyboard controls (these are the exact events the glasses send):
-
-| Key | Glasses gesture | Meaning |
+| | v0.1 | v0.2 |
 |---|---|---|
-| `Enter` | Pinch (activation) | Cue / select. Chapter 1: one press = one note. |
-| `Arrow ← →` | D-pad swipe left / right | Choose an instrument section |
-| `Arrow ↑ ↓` | D-pad swipe up / down | Chapter 3 & 5: dynamics of the selected section. Chapter 4: tempo. |
-| `Escape` | Back gesture | Ask to restart (Enter confirms, Escape cancels) |
-| Pointer drag | Pinch-and-drag (opt-in, Chapter 4+) | Sweep the tempo continuously |
-| `Space` | — | Desktop-only alias for Enter |
-| `D` | — | Toggle the developer overlay (also `#dev` in the URL) |
+| Peak simultaneous sources | 177 | 57 |
+| Sources created over 8 finale bars | 1712 | 571 |
+| Render speed (desktop CPU) | 2.7× real time | 6.9× real time |
+| Peak level / clipped samples | 1.17 / 24 | 0.89 / 0 |
+
+How: a voice budget with per-section caps and oldest-note stealing (40 ms fade), tails that
+stop once inaudible, one shared vibrato LFO per section, brass chords sharing one filter,
+two saws per string note (one for doublings), no per-note bass filter, short woodwind breath
+noise, a lighter looping solo voice (the first pinch keeps the full, rich voice), a 2.0 s
+reverb (was 2.8 s), a brick-wall limiter, a 350 ms scheduler lookahead (was 160 ms),
+`latencyHint: 'balanced'`, and pre-rendered glow sprites that take load off the main thread.
+
+**The gesture guide is now the centre of the app.** A line-art hand (right hand, thumb side)
+demonstrates each gesture large in the middle of the stage when it is introduced, names it,
+and describes the motion. On the first correct input it shrinks into a dock of small icons at
+the bottom, which stays as a reminder. Icons flash gold when their input arrives, pulse when a
+different gesture was used, and the big demo replays after 7 s without the expected input.
+
+**A new chapter teaches Back.** Pinch opens a section's card (the other sections drop away
+so the chosen one plays alone); the middle-finger pinch demo appears; Back closes the card
+and the orchestra returns. The wearer does it once guided and once alone. Back from the main
+stage opens a pause popup: Pinch restarts, Back keeps conducting.
+
+## Gestures and the inputs they produce
+
+| Gesture (Meta Neural Band) | Hand animation | Event the app receives |
+|---|---|---|
+| Pinch — thumb to index finger | Thumb taps the index fingertip, gold spark | `Enter` |
+| Swipe — thumb along the side of the index finger | Thumb slides along the finger, horizontal chevrons | `ArrowLeft` / `ArrowRight` |
+| Swipe up / down | Thumb slides across the finger, vertical chevrons | `ArrowUp` / `ArrowDown` |
+| Pinch and drag (opt-in) | Pinched hand moves side to side | `pointerdown/move/up` |
+| Back — thumb to middle finger | Index lifts, thumb taps the gold middle finger | `Escape`, or history back |
+
+The guide reacts to input events only. It cannot see the wearer's hand and never claims to.
+
+Desktop keys: `Enter` (or `Space`) = pinch, arrows = swipes, `Escape` = Back, mouse drag =
+pinch-and-drag, `D` = developer overlay.
+
+## Chapters
+
+1. **The First Note** — one pinch, one note. Eight pinches play the melody; the shared clock
+   then starts and the phrase repeats.
+2. **Find Your Orchestra** — swipe left/right to move between Strings, Woodwinds and Brass
+   (visual only); pinch brings the focused section in.
+3. **Step Back** — pinch opens a section's card (that section plays alone), Back closes it.
+   Twice.
+4. **Shape the Music** — swipe up/down changes the focused section's dynamics; crescendo to ff.
+5. **Conduct the Tempo** — pinch and drag sweeps the tempo; swipe up/down also changes it
+   (±4 BPM). Reach Allegro (108).
+6. **The Finale** — pinch cues the full orchestra, pinch again brings it home: ritardando,
+   final chord, "Bravo", then "Pinch to conduct again".
 
 ## How the music engine works
 
-Everything is synthesized with the Web Audio API at runtime; there are no audio files,
-no third-party services and nothing copyrighted.
+Everything is synthesized with the Web Audio API; there are no audio files and no services.
+No `AudioContext` exists until the first `Enter`; it is created inside that handler and the
+first note is scheduled 10 ms later. A single lookahead scheduler counts 16th-note steps and
+every section's pattern is a function of that step and its time, so layers cannot drift.
+Tempo changes only alter the length of future steps. Dynamics move each section's bus gain and
+lowpass cutoff with smooth `setTargetAtTime` ramps; the Back chapter uses a separate duck gain
+per section, and the pause popup ducks the master. Hiding the page suspends the context and
+the clock; returning resumes both. Restart closes the context entirely.
 
-**Silence until the first gesture.** No `AudioContext` exists until the first `Enter`
-keydown. `Audio.ensure()` is only ever called from inside the input handler, which is
-what browser autoplay policies require. If the context comes up `suspended`, it is resumed
-in the same handler and the first note is scheduled at `currentTime + 10 ms`, so it sounds
-the moment the context runs. Restarting closes the context entirely; the next run builds a
-fresh one from the next pinch.
+Back handling: the Meta docs say Back arrives as `Escape` or as `history.back()`. When a popup
+opens the app adds one history entry. If the system goes back through history, `popstate`
+closes the popup instead of leaving the app. The app never calls `history.back()` itself, so a
+Back cannot be applied twice.
 
-**Signal chain.** Five buses — `solo`, `strings`, `winds`, `brass`, `perc` — each go
-through an optional lowpass filter (brightness) and a level gain (dynamics), then into a
-master gain, a gentle compressor and the destination. Every bus also has a send into a
-`ConvolverNode` whose impulse response is generated in code (2.8 s exponentially decaying
-stereo noise), which gives every note its hall reverberation.
+## Testing
 
-**Voices.** Each instrument is a small additive/subtractive patch with attack, sustain and
-release envelopes:
-- *Soloist* (the first note): sine + triangle + two soft partials with a fast attack and
-  exponential decay, plus a slow sine "bloom" an octave below — harp-like, with body.
-- *Strings*: three detuned sawtooths with delayed vibrato and a 0.3 s bow attack, plus a
-  filtered bass on the chord root.
-- *Woodwinds*: triangle + sine with vibrato and a short filtered-noise breath transient.
-- *Brass*: two sawtooths + sub-square through a per-note lowpass whose cutoff opens on
-  the attack and settles, giving the characteristic brass "bite".
-- *Timpani* (finale only): sine with a pitch drop plus a low noise thump.
+Desktop: open `index.html` in Chrome, click the page, press Enter. Press `D` for the overlay.
 
-**Shared clock.** `Clock` is a single look-ahead scheduler (160 ms window, 25 ms timer) that
-counts 16th-note steps. Every section's pattern is a pure function of the same step number
-and the same step time, so layers cannot drift relative to one another. A section that joins
-mid-bar starts on the very next scheduler step; strings and brass additionally fill the rest
-of the current bar immediately, so the join is heard at once without waiting for bar 1.
+Simulator: install the **Meta Ray-Ban Display Simulator** Chrome extension, open the hosted URL,
+switch the simulator on and use its D-pad and Select buttons.
 
-**Tempo.** Changing the BPM only changes the length of *future* steps
-(`nextTime += 60 / bpm / 4`). Notes already handed to the audio thread keep their times, so a
-tempo change never re-triggers or restarts anything; it simply bends the grid from the next
-step on. The finale's ritardando is the same mechanism applied a little each step.
+Glasses: host at a public HTTPS URL (GitHub Pages) and connect it in the Meta AI app under
+App Settings → Apps → Web Apps → Connect Web App. For diagnostics on the glasses, connect a
+second Web App with the same URL plus `#dev` (for example
+`https://yourname.github.io/conductor/#dev`); it opens with the overlay showing.
 
-**Dynamics.** Intensity (0–1, in 1/8 steps) drives the bus gain with `setTargetAtTime` and
-the bus lowpass cutoff (500 Hz → 7 kHz), so a crescendo gets louder *and* brighter with no
-zipper noise. The dynamic marking shown under each section (pp … fff) is derived from the
-same value.
+The overlay shows: audio state and latency, sources allocated now and peak (this includes the
+350 ms already scheduled ahead, so it reads higher than the number actually sounding), stolen
+notes, the latest-scheduled note lateness, the scheduler's longest timer gap, clock resyncs,
+the expected gesture, card/pause state and a timestamped log (including visibility changes).
 
-**The composition.** An original two-bar melody in D major (D E F♯ A | B A F♯ D) over a
-four-bar progression D – Bm – G – A. Chapter 1 hands the melody to the wearer one note per
-pinch; when the 8th note lands, the clock starts and the soloist repeats the phrase. Strings
-sustain the chords, woodwinds arpeggiate them an octave up, brass marks the half-bars. In
-the finale the same melody is doubled at the octave, the strings take it in their register,
-the woodwinds move to 16ths, the brass plays a fanfare rhythm and timpani enter. The
-resolution is a one-bar ritardando into a held D-major chord in every section.
+An automated headless-Chromium run of this build passed 28 checks covering silence before
+input, one note per first pinch, repeat/duplicate/rapid-input rejection, the idle hint, every
+chapter transition, the card and both Back paths (Escape and history), the pause popup,
+dynamics, drag tempo, four layers on one grid, the finale and restart.
 
-**Lifecycle.** On `visibilitychange` → hidden the clock pauses and the context is
-suspended; on return both resume from where they were (no drift, because the context's clock
-stops too). `pagehide` closes the context.
+## Still to verify on the glasses
 
-## Chapters and what each input does
+1. **Stutter gone?** Play through the finale. If it still breaks up, open the `#dev` Web App
+   and note `max timer gap`, `late notes max`, `resyncs` and `stolen` near the finale.
+2. **Back gesture delivery.** Does the middle-finger pinch close the card, or leave the app
+   for the system menu? The log shows whether it arrived as a key or as `history back`.
+3. **Swipe direction.** Compare with the glasses' own tutorial. If thumb-toward-fingertip
+   produces `ArrowRight` rather than `ArrowLeft`, set `SWIPE_FLIP = true` in the Gestures
+   module so the chevrons match.
+4. **Legibility of the hand** on the additive display in daylight, and whether the 0.3 stage
+   dim behind the big demo is enough.
+5. **Pinch and drag** scale (`0.22 BPM per px`) and whether a plain pinch also produces a
+   pointer sequence.
+6. **Web Audio through the glasses speaker** — already working per your test.
 
-1. **The First Note** — `Enter` plays exactly one note. Eight presses play the melody; the
-   8th press starts the shared clock and the phrase repeats. Arrow keys do nothing here.
-2. **Find Your Orchestra** — `← →` moves the focus cursor across Strings / Woodwinds / Brass
-   (visual only, no musical action). `Enter` brings the focused section in.
-3. **Shape the Music** — `↑ ↓` raise or lower the focused section's dynamics; the crescendo
-   challenge completes when the average intensity of the joined sections reaches ff.
-4. **Conduct the Tempo** — `↑ ↓` change the tempo ±4 BPM (keyboard fallback); pinch-and-drag
-   sweeps it continuously. Reaching Allegro (≥108) completes the chapter.
-5. **The Finale** — `Enter` cues the full orchestra (phase 2 starts on the next bar);
-   `← → ↑ ↓` still shape sections; a second `Enter` brings the movement home
-   (ritardando → final chord → completion animation → "Pinch to conduct again").
+## Extending
 
-## What is real and what is a placeholder
-
-Real and working in this build:
-- All five chapters, the audio engine, the shared clock, section joins, dynamics, tempo
-  (keys and pointer drag), the finale with resolution, restart, Escape confirmation.
-- Input guards: key auto-repeat ignored, duplicate `keydown` without `keyup` ignored,
-  the same action cannot fire twice within 80 ms, pointer drag needs 8 px of movement.
-
-Placeholders / simplifications:
-- The orchestra graphics are abstract glyphs, not modelled musicians.
-- Google Fonts are linked for the display typography; if the glasses cannot reach
-  fonts.googleapis.com the page falls back to system serif/sans faces and still works.
-- Chapter 3's "challenge" measures average intensity, not any analysis of the wearer's
-  gesture quality. The app never claims to evaluate finger position or technique.
-- There is no persistence; each session starts from the silent overture.
-
-## Verifying behaviour yourself
-
-Press `D` for the developer overlay. It shows:
-- **Audio** — whether an `AudioContext` exists (it must read *none* until the first pinch),
-  its state, the number of *user-triggered* notes and of scheduled voices.
-- **Clock** — running state, BPM, current step / bar / position, step length in ms.
-- **Layers** — for each section: joined, the step it joined on, and the last step and
-  audio time it scheduled. Because every layer reads the same step, layers that are on
-  should show the same `last` step at the same `@time`. The overlay flags `DRIFT` if any
-  active layer falls more than a bar behind the head.
-- **Log** — timestamped events: context creation, each user note, joins, tempo changes,
-  finale phases, the final chord time, restart.
-
-From the browser console `window.CONDUCTOR` exposes every module. `CONDUCTOR.Audio.ctx()`
-returns `null` before the first gesture; `CONDUCTOR.Audio.stats.userNotes` counts notes
-that user input triggered; `CONDUCTOR.Layers.layers` gives the per-section step bookkeeping.
-
-An automated headless-Chromium run of this build passed 24 checks: silence before input,
-exactly one note on the first Enter, auto-repeat / duplicate / rapid-input rejection, melody
-completion and clock start, navigation without joining, joining, four layers on one grid
-with 0 ms error, dynamics changing gain and cutoff, tempo change with alignment preserved,
-pointer-drag tempo, finale phases, resolution, and restart back to a context-free silent
-state.
-
-## Testing with the Meta Ray-Ban Display Web App Simulator
-
-1. Install the **Meta Ray-Ban Display Simulator** Chrome extension from the Chrome Web
-   Store (linked from https://wearables.developer.meta.com/docs/develop/webapps/test/).
-2. Open your app URL in Chrome (a local `http://localhost` server is fine for the
-   simulator) and click the extension icon to turn the simulator on. It frames the page at
-   600 × 600 and shows on-screen D-pad and Select controls that dispatch the same
-   `ArrowUp/Down/Left/Right` and `Enter` keyboard events the glasses send.
-3. Walk the chapters with the on-screen controls or the physical arrow keys / Enter.
-4. Use the simulator's **View on Glasses QR** to generate a deep-link QR for installing on
-   your own glasses (this needs the public HTTPS URL below).
-
-Meta's own note applies: the simulator is not a substitute for device validation.
-
-## Hosting at a public HTTPS URL and opening it on the glasses
-
-The glasses runtime only loads Web Apps from a publicly accessible **HTTPS** URL. Any static
-host works; the app is a single file. Examples:
-
-- **GitHub Pages**: push `index.html` to a repo, Settings → Pages → deploy from `main`.
-- **Netlify / Vercel / Cloudflare Pages**: drag the folder in, or connect the repo.
-
-Then, on the glasses:
-
-1. In the Meta AI app go to Settings → App Info and tap the version number five times to
-   reveal **Developer Mode**; switch it on. (Requires glasses software v125+ and Meta AI
-   app v272+.)
-2. Either scan the install QR generated by the simulator, or in the Meta AI app open
-   **App Settings → Apps → Web Apps → Connect Web App**, enter the HTTPS URL and save.
-3. Launch CONDUCTOR from the glasses. The screen shows the waiting orchestra; pinch once.
-
-## What still needs verification on the actual glasses
-
-These could not be verified inside this development environment and are called out rather
-than simulated:
-
-1. **Web Audio playback through the glasses speaker.** Meta's documentation states that
-   Web Apps get audio playback through the glasses speaker and documents `speechSynthesis`,
-   but it does not explicitly mention `AudioContext`. Confirm that the first pinch produces
-   sound on hardware, and check whether the context starts `suspended` and needs the
-   in-gesture `resume()` (already implemented).
-2. **Low-frequency reproduction.** The bass and timpani voices sit around 70–150 Hz; the
-   glasses' speakers may reproduce these weakly. Bass roots are already voiced an octave
-   above the very lowest register; adjust `Score.chords[].root` if needed.
-3. **Latency.** The desktop path from keydown to sound is a few ms; on device the pinch →
-   Enter → audio path has unknown latency. If it feels loose, nothing in the engine needs
-   to change, but the visual cue timing (`Visual.queue` lead of 12 ms) may want adjusting.
-4. **Pinch-and-drag.** The opt-in (`touch-action: none` on `<body>` in the initial
-   stylesheet) and the `pointerdown/move/up` handling follow the documentation, but the
-   actual `clientX` scale of a wearer's arm movement is unknown. The tempo gain is
-   `0.22 BPM per px` (`Game.setTempo` call in the `drag` handler); tune it on device.
-   Also confirm whether a plain pinch on device emits *both* a pointer sequence and an
-   `Enter` — the drag handler ignores pointer sequences under 8 px, so a plain pinch will
-   not change tempo, but this is untested on hardware.
-5. **Additive display legibility.** The design uses cyan / ivory / gold on pure black; the
-   waiting-state musicians are drawn at ~13 % brightness, which may be invisible on the
-   additive display in bright surroundings. Raise the `base` value in `Visual.draw` if so.
-6. **Frame rate.** The canvas draws ~25 radial gradients per frame plus particles. Fine on
-   desktop; verify it holds up on the glasses and reduce `spawn()` counts if not.
-7. **Google Fonts reachability** from the glasses' network.
-8. **Escape / back gesture behaviour**: whether the system consumes the back gesture before
-   the page sees `Escape` (in which case the in-app restart prompt is reached only from the
-   keyboard).
-
-## Extending the composition
-
-- `Score.melody` / `Score.chords` hold all musical material; `Layers.onStep` holds the
-  arrangement per section and per finale phase.
-- New sections: add a bus in `Audio.BUS`, a voice function, a branch in `Layers.onStep`,
-  a cluster in `Visual.SEC`, and the name in `Game.SECTIONS`.
-- New chapters: add an entry in `Game.CH` and a `case` in `Game.onAction`.
+`Score` holds the musical material, `Layers.onStep` the arrangement, `Gestures.INFO` the
+gesture names and descriptions, `Gestures.pose` the hand animation per gesture, and
+`Game` the chapters (`firstCue`, `enter2`…`enter6`, `onAction`, `expected`).
