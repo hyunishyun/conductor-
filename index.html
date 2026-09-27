@@ -6,7 +6,7 @@
 <title>CONDUCTOR</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Manrope:wght@400;500;600&display=swap">
 <style>
-/* CONDUCTOR v0.3 — gesture tutorial for Meta Ray-Ban Display.
+/* CONDUCTOR v0.4 — gesture tutorial for Meta Ray-Ban Display.
    Single-theme by design: the glasses display is additive, so pure black is transparent. */
 :root{
   --ink:#000000;
@@ -80,7 +80,7 @@ body{font-family:var(--ui);display:flex;align-items:center;justify-content:cente
 <script>
 'use strict';
 /* =====================================================================
-   CONDUCTOR v0.3 — modules
+   CONDUCTOR v0.4 — modules
    Log       verification log (dev overlay: key D, or #dev in the URL)
    Score     the original melody and harmony
    Audio     sample engine (pre-rendered sprite) + synth fallback, buses, voice budget
@@ -93,7 +93,7 @@ body{font-family:var(--ui);display:flex;align-items:center;justify-content:cente
    Game      the six chapters (state machine)
    Dev       overlay for verifying audio/clock behaviour
    ===================================================================== */
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
 const TAU = Math.PI * 2;
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -598,7 +598,7 @@ const Gestures = (() => {
     return [B, J, { x: B.x + d * Math.cos(a), y: B.y + d * Math.sin(a) }];
   }
   const P = (x, y) => ({ x, y }), mix = (p, q, k) => P(lerp(p.x, q.x, k), lerp(p.y, q.y, k));
-  const THUMB_REST = P(-40, 6);
+  const THUMB_REST = P(-39, 0);
   /* the thumb's base knuckle follows its tip a little, like a real metacarpal */
   function thumb(T) {
     const B = BASE.thumb, L = LEN.thumb[0] + LEN.thumb[1], d = Math.hypot(T.x - B.x, T.y - B.y);
@@ -611,13 +611,14 @@ const Gestures = (() => {
 
   /* pose(kind, phase 0..1) → points, contact, arrows, offsets */
   function pose(kind, p) {
-    let iK = 1, iLift = 0, mK = 1, mLift = 0, thumbT = THUMB_REST, contact = 0, cpt = null, arrow = null, shift = P(0, 0), active = 'index';
+    let iK = 1, iLift = 0, mK = 1, mLift = 0, thumbT = THUMB_REST, contact = 0, cpt = null, arrow = null, shift = P(0, 0), active = 'index', tapAge, track = null;
     if (kind === 'pinch' || kind === 'drag') {
       const e = kind === 'drag' ? (p < 0.1 ? ease(p / 0.1) : p > 0.92 ? 1 - ease((p - 0.92) / 0.08) : 1) : tapEnv(p);
       iK = 1 + 0.12 * e;
       const I = chain(BASE.index, LEN.index, CURL.index, iK);
       const tip = I[3]; const target = P(tip.x - 3, tip.y - 4);
       thumbT = mix(THUMB_REST, target, e); contact = e > 0.96 ? 1 : 0; cpt = target;
+      if (kind === 'pinch' && contact) tapAge = clamp((p - 0.38) / 0.3, 0, 1);
       if (kind === 'drag') {
         const m = p < 0.12 ? 0 : p > 0.9 ? 0 : (p - 0.12) / 0.78; shift = P(Math.sin(m * TAU) * 44, 0);
         arrow = { type: 'h2', dir: Math.cos(m * TAU) >= 0 ? 1 : -1, on: contact };
@@ -632,9 +633,14 @@ const Gestures = (() => {
       let k = 0, touch = 0;
       if (q < 0.12) { k = 0; touch = ease(q / 0.12); } else if (q < 0.58) { k = ease((q - 0.12) / 0.46); touch = 1; } else if (q < 0.72) { k = 1; touch = 1; } else { k = 1 - ease((q - 0.72) / 0.28); touch = 1 - ease((q - 0.72) / 0.28); }
       const s = lerp(s0, s1, k), o = lerp(o0, o1, k);
-      const at = along(I, s); const dl = Math.hypot(at.d.x, at.d.y); const n = P(at.d.y / dl, -at.d.x / dl);
+      /* n = the finger's outward normal on the thumb side (up), so o grows upward */
+      const at = along(I, s); const dl = Math.hypot(at.d.x, at.d.y); const n = P(-at.d.y / dl, at.d.x / dl);
       const on = P(at.p.x + n.x * o, at.p.y + n.y * o);
       thumbT = mix(P(on.x + 6, on.y - 12), on, touch); contact = touch > 0.9 && q < 0.72 ? 0.7 : 0; cpt = on;
+      /* the rail the thumb slides along, from start to end of this stroke */
+      track = [];
+      for (let i = 0; i <= 6; i++) { const u = lerp(s0, s1, i / 6), oo = lerp(o0, o1, i / 6), a2 = along(I, u), l2 = Math.hypot(a2.d.x, a2.d.y);
+        track.push(P(a2.p.x + (-a2.d.y / l2) * oo, a2.p.y + (a2.d.x / l2) * oo)); }
       arrow.on = q > 0.1 && q < 0.72 ? 1 : 0; arrow.k = k;
     } else if (kind === 'back') {
       const e = tapEnv(p); active = 'middle';
@@ -643,59 +649,125 @@ const Gestures = (() => {
       const M = chain(BASE.middle, LEN.middle, CURL.middle, mK);
       const tip = M[3]; const target = P(tip.x - 3, tip.y - 3);
       thumbT = mix(THUMB_REST, target, e); contact = e > 0.96 ? 1 : 0; cpt = target;
+      if (contact) tapAge = clamp((p - 0.38) / 0.3, 0, 1);
     }
     const I = chain(BASE.index, LEN.index, CURL.index, iK, -iLift);
     const M = chain(BASE.middle, LEN.middle, CURL.middle, mK, -mLift);
     const R = chain(BASE.ring, LEN.ring, CURL.ring, 1);
     const T = thumb(thumbT);
-    return { I, M, R, T, contact, cpt, arrow, shift, active };
+    return { I, M, R, T, contact, cpt, arrow, shift, active, tapAge, track };
   }
 
-  /* ----- drawing ----- */
-  function limb(g, pts, w, col, a, ol, s) {
-    g.beginPath(); g.moveTo(pts[0].x, pts[0].y); for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
-    g.lineWidth = w + (2 * ol) / s; g.strokeStyle = rgba(col, a); g.stroke();
-    g.lineWidth = w; g.strokeStyle = '#000'; g.stroke();
+  /* ----- drawing (v0.4: refined line) ----- */
+  /* A digit as tapered segments: all outer strokes first, then the black cores,
+     so joints stay seamless and the black hides whatever is behind the finger. */
+  function taper(g, pts, w0, w1, col, a, ol, s) {
+    const n = pts.length - 1;
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = 0; i < n; i++) {
+        const w = lerp(w0, w1, (i + 0.5) / n);
+        g.beginPath(); g.moveTo(pts[i].x, pts[i].y); g.lineTo(pts[i + 1].x, pts[i + 1].y);
+        g.lineWidth = pass === 0 ? w + (2 * ol) / s : w; g.strokeStyle = pass === 0 ? rgba(col, a) : '#000'; g.stroke();
+      }
+    }
   }
-  /* back of the hand + wrist as one tapered outline, filled black so it hides what is behind */
+  /* a background digit: one outer stroke and one core, no taper */
+  function plain(g, pts, w, col, a, ol, s) {
+    g.beginPath(); g.moveTo(pts[0].x, pts[0].y); for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+    g.lineWidth = w + (2 * ol) / s; g.strokeStyle = rgba(col, a); g.stroke(); g.lineWidth = w; g.strokeStyle = '#000'; g.stroke();
+  }
+  /* knuckle crease: a short stroke across the joint, on the back of the finger */
+  function crease(g, p, q, w, col, a, s) {
+    const dx = q.x - p.x, dy = q.y - p.y, l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
+    g.beginPath(); g.moveTo(p.x + nx * w * 0.34, p.y + ny * w * 0.34); g.lineTo(p.x - nx * w * 0.08, p.y - ny * w * 0.08);
+    g.lineWidth = 0.9 / s; g.strokeStyle = rgba(col, a); g.stroke();
+  }
+  /* fingernail hint near the tip */
+  function nail(g, pts, w, col, a, s) {
+    const q = pts[pts.length - 1], p = pts[pts.length - 2], dx = q.x - p.x, dy = q.y - p.y, l = Math.hypot(dx, dy) || 1;
+    const ux = dx / l, uy = dy / l, nx = -uy, ny = ux;
+    g.beginPath(); g.ellipse(q.x - ux * w * 0.55 - nx * w * 0.18, q.y - uy * w * 0.55 - ny * w * 0.18, w * 0.34, w * 0.2, Math.atan2(uy, ux), 0, TAU);
+    g.lineWidth = 0.9 / s; g.strokeStyle = rgba(col, a); g.stroke();
+  }
+  /* back of the hand + a short wrist whose outline fades out, so the eye stays on the fingers */
+  const WRIST = 106, fades = new Map();
   function palm(g, col, a, ol, s) {
     g.beginPath();
     g.moveTo(-4, -3);
     g.quadraticCurveTo(30, -10, 74, 4);            /* knuckles → back of hand */
-    g.quadraticCurveTo(100, 10, 128, 12);          /* wrist → forearm top */
-    g.lineTo(128, 40);
-    g.quadraticCurveTo(98, 42, 76, 46);            /* forearm underside → heel of the hand */
+    g.quadraticCurveTo(90, 8, WRIST, 10);          /* → wrist */
+    g.lineTo(WRIST, 42);
+    g.quadraticCurveTo(90, 43, 76, 46);            /* wrist underside → heel of the hand */
     g.quadraticCurveTo(46, 52, 18, 38);            /* heel → under the fingers */
     g.quadraticCurveTo(0, 26, -4, -3);
     g.closePath();
     g.fillStyle = '#000'; g.fill();
-    g.lineWidth = (2 * ol) / s; g.strokeStyle = rgba(col, a); g.stroke();
-    g.lineWidth = 1 / s; g.strokeStyle = rgba(col, a * 0.35);  /* wrist crease */
-    g.beginPath(); g.moveTo(96, 9); g.quadraticCurveTo(92, 26, 96, 43); g.stroke();
+    const key = col.join() + '|' + a.toFixed(2); let fade = fades.get(key);
+    if (!fade) { fade = g.createLinearGradient(58, 0, WRIST, 0); fade.addColorStop(0, rgba(col, a)); fade.addColorStop(1, rgba(col, 0)); if (fades.size > 64) fades.clear(); fades.set(key, fade); }
+    g.lineWidth = (2 * ol) / s; g.strokeStyle = fade; g.stroke();
   }
-  /* draw a hand. x,y = screen position of the hand's visual centre; s = scale */
+  /* where the contact point was a moment ago (for the motion trail) */
+  function trailPoints(kind, p, period) {
+    const pts = [], q0 = pose(kind, p);
+    for (let k = 1; k <= 8; k++) {
+      const pp = ((p - k * 0.03) % 1 + 1) % 1, q = pose(kind, pp);
+      if (!q.cpt || !(q.contact > 0) || (q.arrow && q.arrow.on === 0)) break;
+      pts.push({ x: q.cpt.x + q.shift.x - q0.shift.x, y: q.cpt.y + q.shift.y - q0.shift.y, k });
+    }
+    return pts;
+  }
+  /* draw a hand. x,y = screen position of the hand's visual centre; s = scale.
+     o.detail adds creases and nails (big demo only); o.trail adds the motion trail. */
   function drawHand(g, kind, p, x, y, s, o = {}) {
-    const alpha = o.alpha ?? 1, ol = o.ol ?? 1.4, flash = o.flash ?? 0;
-    const q = pose(kind, p);
-    const base = flash > 0 ? GO : CY, hi = flash > 0 ? GO : IV, act = kind === 'back' ? GO : hi;
+    const alpha = o.alpha ?? 1, ol = o.ol ?? 1.1, flash = o.flash ?? 0;
+    const q = pose(kind, p), back = kind === 'back';
+    const base = flash > 0 ? GO : CY, hi = flash > 0 ? GO : IV, act = back ? GO : hi;
     const f = o.focus || P(30, 18);
     g.save();
     if (o.clip) { g.beginPath(); g.rect(x - o.clip.w / 2, y - o.clip.h / 2, o.clip.w, o.clip.h); g.clip(); }
     const sh = o.noShift ? P(0, 0) : q.shift; g.translate(x + sh.x * s, y + sh.y * s); g.scale(s, s); g.translate(-f.x, -f.y);
     g.lineCap = 'round'; g.lineJoin = 'round';
     const A = alpha;
-    limb(g, q.R, 11, base, 0.4 * A, ol, s);
-    limb(g, q.M, 12.5, kind === 'back' ? act : base, (kind === 'back' ? 0.95 : 0.5) * A, ol, s);
+    /* back to front: ring, middle, hand, index, thumb */
+    plain(g, q.R, 10, base, 0.32 * A, ol, s);
+    if (back) taper(g, q.M, 12.5, 9.5, act, 0.95 * A, ol, s); else plain(g, q.M, 11.5, base, 0.42 * A, ol, s);
     palm(g, base, 0.8 * A, ol, s);
-    limb(g, q.I, 13, kind === 'back' ? base : hi, (kind === 'back' ? 0.6 : 0.95) * A, ol, s);
-    limb(g, [THENAR, q.T[0]], 18, base, 0.75 * A, ol, s);
-    limb(g, q.T, 13.5, kind === 'back' ? act : hi, 0.98 * A, ol, s);
-    /* contact spark */
+    taper(g, q.I, 13, 10, back ? base : hi, (back ? 0.5 : 0.95) * A, ol, s);
+    taper(g, [THENAR, q.T[0]], 19, 15, base, 0.7 * A, ol, s);
+    taper(g, q.T, 14.5, 11.5, act, 0.98 * A, ol, s);
+    if (o.detail) {
+      const dig = [[q.T, 14, act, 0.5]]; dig.push(back ? [q.M, 11, act, 0.5] : [q.I, 12, hi, 0.5]);
+      for (const [pts, w, c, da] of dig) { for (let i = 1; i < pts.length - 1; i++) crease(g, pts[i], pts[i + 1], w, c, da * A, s); nail(g, pts, w * 0.85, c, (da + 0.25) * A, s); }
+    }
+    /* motion trail of the thumb pad (swipe, drag) */
+    if (o.trail && q.track) {
+      /* motion arrow hugging the finger: the thumb's path, lengthened and set just beside it */
+      const tk = q.track, t0 = tk[0], t1 = tk[tk.length - 1], mx = (t0.x + t1.x) / 2, my = (t0.y + t1.y) / 2;
+      const dx = t1.x - t0.x, dy = t1.y - t0.y, dl = Math.hypot(dx, dy) || 1;
+      let px = -dy / dl, py = dx / dl;
+      if (kind === 'swipeLR' ? py > 0 : px > 0) { px = -px; py = -py; }      /* above the finger / on the fingertip side */
+      const off = kind === 'swipeLR' ? 15 : 17, ext = Math.max(1.9, 28 / dl);
+      const pts = tk.map(t => P(mx + (t.x - mx) * ext + px * off, my + (t.y - my) * ext + py * off));
+      const on = q.arrow ? (q.arrow.on ? 1 : 0.45) : 1;
+      g.lineWidth = 1.5 / s; g.strokeStyle = rgba(GO, 0.8 * A * on);
+      g.beginPath(); pts.forEach((t, i) => i ? g.lineTo(t.x, t.y) : g.moveTo(t.x, t.y)); g.stroke();
+      const e = pts[pts.length - 1], b = pts[pts.length - 2], ang = Math.atan2(e.y - b.y, e.x - b.x);
+      g.beginPath(); g.moveTo(e.x - Math.cos(ang - 0.55) * 5, e.y - Math.sin(ang - 0.55) * 5); g.lineTo(e.x, e.y); g.lineTo(e.x - Math.cos(ang + 0.55) * 5, e.y - Math.sin(ang + 0.55) * 5); g.stroke();
+      g.fillStyle = rgba(GO, 0.8 * A * on); g.beginPath(); g.arc(pts[0].x, pts[0].y, 1.6, 0, TAU); g.fill();
+    }
+    if (o.trail && q.cpt && (kind === 'swipeLR' || kind === 'swipeUD' || kind === 'drag')) {
+      const tr = trailPoints(kind, p); let prev = q.cpt;
+      for (const t of tr) {   /* a comet tail: thinner and fainter the older it is */
+        g.beginPath(); g.moveTo(prev.x, prev.y); g.lineTo(t.x, t.y);
+        g.lineWidth = (4.2 - t.k * 0.4) / s; g.strokeStyle = rgba(GO, A * 0.85 * (1 - t.k / 9)); g.stroke(); prev = t;
+      }
+    }
+    /* contact: a crisp ring and centre dot; a tap sends out one ripple */
     if (q.contact > 0 && q.cpt) {
-      const c = q.cpt; const glow = g.createRadialGradient(c.x, c.y, 0, c.x, c.y, 16);
-      glow.addColorStop(0, rgba(GO, 0.85 * A * q.contact)); glow.addColorStop(1, rgba(GO, 0));
-      g.fillStyle = glow; g.beginPath(); g.arc(c.x, c.y, 16, 0, TAU); g.fill();
-      g.strokeStyle = rgba(GO, 0.9 * A * q.contact); g.lineWidth = 1.2 / s; g.beginPath(); g.arc(c.x, c.y, 11 + 6 * (p % 0.2) * 5, 0, TAU); g.stroke();
+      const c = q.cpt, ca = A * Math.min(1, q.contact + 0.3);
+      g.lineWidth = 1.2 / s; g.strokeStyle = rgba(GO, 0.95 * ca); g.beginPath(); g.arc(c.x, c.y, 5, 0, TAU); g.stroke();
+      g.fillStyle = rgba(GO, ca); g.beginPath(); g.arc(c.x, c.y, 1.8, 0, TAU); g.fill();
+      if (q.tapAge !== undefined) { const r = 6 + q.tapAge * 12; g.strokeStyle = rgba(GO, 0.55 * ca * (1 - q.tapAge)); g.beginPath(); g.arc(c.x, c.y, r, 0, TAU); g.stroke(); }
     }
     g.restore();
     /* direction arrows (screen space, not scaled with the hand so they stay crisp) */
@@ -715,7 +787,7 @@ const Gestures = (() => {
       for (let i = 0; i < 3; i++) chevron(g, cx + dir * (i - 1) * sz * 1.1, cy, dir, 0, sz, col, A * (0.25 + 0.75 * on) * (0.35 + 0.3 * i));
       chevron(g, cx - dir * sz * 2.6, cy, -dir, 0, sz * 0.8, col, A * 0.14);
     } else if (ar.type === 'v') {
-      const cx = x - 72 * s, cy = y - 8 * s, sz = 9 * s;
+      const cx = x - 96 * s, cy = y - 8 * s, sz = 9 * s;
       for (let i = 0; i < 3; i++) chevron(g, cx, cy + dir * (i - 1) * sz * 1.1, 0, dir, sz, col, A * (0.25 + 0.75 * on) * (0.35 + 0.3 * i));
       chevron(g, cx, cy - dir * sz * 2.6, 0, -dir, sz * 0.8, col, A * 0.14);
     } else if (ar.type === 'h2') {
@@ -728,13 +800,19 @@ const Gestures = (() => {
   }
 
   /* small icon: the fingertip area only, cropped, with its own tiny direction marks */
-  const ICON = { s: 0.5, w: 50, h: 44, focus: P(-26, 20) };
+  const ICON = { s: 0.58, w: 52, h: 46, focus: P(-28, 16) };
+  const iconCache = new Map();
+  function cachedIcon(g, kind, p, x, y, a) {
+    const key = kind + '|' + p + '|' + a.toFixed(2); let c = iconCache.get(key);
+    if (!c) { c = document.createElement('canvas'); c.width = 92; c.height = 60; drawIcon(c.getContext('2d'), kind, p, 46, 30, a, 0); if (iconCache.size > 40) iconCache.clear(); iconCache.set(key, c); }
+    g.drawImage(c, x - 46, y - 30);
+  }
   function drawIcon(g, kind, p, x, y, a, flash) {
-    drawHand(g, kind, p, x, y, ICON.s, { alpha: a, ol: 1.1, flash, arrows: false, focus: ICON.focus, clip: ICON, noShift: true });
+    drawHand(g, kind, p, x, y, ICON.s, { alpha: a, ol: 0.95, flash, arrows: false, focus: ICON.focus, clip: ICON, noShift: true });
     const col = flash > 0 ? GO : CY, sz = 5;
-    if (kind === 'swipeLR') { chevron(g, x - 27, y, -1, 0, sz, col, a); chevron(g, x + 27, y, 1, 0, sz, col, a); }
-    else if (kind === 'swipeUD') { chevron(g, x - 27, y - 6, 0, -1, sz, col, a); chevron(g, x - 27, y + 6, 0, 1, sz, col, a); }
-    else if (kind === 'drag') { chevron(g, x - 27, y + 8, -1, 0, sz, col, a); chevron(g, x + 27, y + 8, 1, 0, sz, col, a); }
+    if (kind === 'swipeLR') { chevron(g, x - 31, y, -1, 0, sz, col, a); chevron(g, x + 31, y, 1, 0, sz, col, a); }
+    else if (kind === 'swipeUD') { chevron(g, x - 31, y - 6, 0, -1, sz, col, a); chevron(g, x - 31, y + 6, 0, 1, sz, col, a); }
+    else if (kind === 'drag') { chevron(g, x - 31, y + 8, -1, 0, sz, col, a); chevron(g, x + 31, y + 8, 1, 0, sz, col, a); }
   }
 
   /* ----- guide state: one big demo + a dock of small icons ----- */
@@ -760,7 +838,7 @@ const Gestures = (() => {
 
   function layoutDock(g) {
     g.font = '600 11px Manrope, system-ui, sans-serif'; try { g.letterSpacing = '1.6px'; } catch (_) {}
-    const items = S.dock.map(d => ({ ...d, w: 70 + g.measureText(d.label.toUpperCase()).width }));
+    const items = S.dock.map(d => ({ ...d, w: 74 + g.measureText(d.label.toUpperCase()).width }));
     const gap = 22, total = items.reduce((a, i) => a + i.w, 0) + gap * Math.max(0, items.length - 1);
     let x = 300 - total / 2; S.slots = {};
     items.forEach(i => { i.x = x; S.slots[i.key] = { x: x + 30, y: DOCK_Y }; x += i.w + gap; });
@@ -777,11 +855,11 @@ const Gestures = (() => {
       const period = INFO[it.key].period;
       const ph = (fl > 0 || pu > 0) ? ((t * 1.2 / period) % 1) : iconPhase[it.key];
       const a = hidden ? 0.25 : 0.62 + 0.38 * Math.max(fl, pu * (0.5 + 0.5 * Math.sin(t * 9)));
-      drawIcon(g, it.key, ph, it.x + 30, DOCK_Y, a, fl);
+      if (fl > 0 || pu > 0) drawIcon(g, it.key, ph, it.x + 30, DOCK_Y, a, fl); else cachedIcon(g, it.key, ph, it.x + 30, DOCK_Y, a);
       g.font = '600 11px Manrope, system-ui, sans-serif'; try { g.letterSpacing = '1.6px'; } catch (_) {}
       g.fillStyle = fl > 0 ? rgba(GO, 0.95) : rgba(CY, 0.6 + 0.4 * Math.max(pu, 0));
       g.textAlign = 'left'; g.textBaseline = 'middle';
-      g.fillText(it.label.toUpperCase(), it.x + 70, DOCK_Y + 1);
+      g.fillText(it.label.toUpperCase(), it.x + 74, DOCK_Y + 1);
     }
     try { g.letterSpacing = '0px'; } catch (_) {}
     /* extra (popup) icons */
@@ -800,7 +878,7 @@ const Gestures = (() => {
       a *= 1 - k * (slot ? 0.4 : 1); arrowsOn = false;
       if (k >= 1) { S.demo = null; S.flash[d.key] = t; return; }
     }
-    drawHand(g, d.key, (age / info.period) % 1, x, y, s, { alpha: a, ol: 1.5, focus, arrows: arrowsOn });
+    drawHand(g, d.key, (age / info.period) % 1, x, y, s, { alpha: a, ol: 1.15, focus, arrows: arrowsOn, detail: d.state !== 'out', trail: arrowsOn });
     if (d.state !== 'out') {
       g.textAlign = 'center'; g.textBaseline = 'middle';
       g.font = '600 12px Manrope, system-ui, sans-serif'; try { g.letterSpacing = '3px'; } catch (_) {}
@@ -811,7 +889,7 @@ const Gestures = (() => {
     }
   }
   return {
-    INFO, ACTION, teach, dismiss, setDock, input, pulse, flashOnly, setExtra, draw, drawHand, drawIcon, pose,
+    INFO, ACTION, teach, dismiss, setDock, input, pulse, flashOnly, setExtra, draw, drawHand, drawIcon, cachedIcon, pose,
     showing: () => !!(S.demo && S.demo.state !== 'out'), demoKey: () => (S.demo ? S.demo.key : null),
     hold(on) { S.hold = !!on; },
     dim: () => (S.demo && S.demo.state !== 'out' && !S.hold ? 0.3 : 1),

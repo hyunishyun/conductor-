@@ -7,7 +7,7 @@ by turning the wearer into the conductor of an orchestra. An animated hand shows
 as it is introduced, every gesture produces an immediate musical response, and the melody
 played by the very first pinch grows into a full orchestral movement.
 
-Version: **0.3.0** (shown in the dev overlay).
+Version: **0.4.0** (shown in the dev overlay).
 
 ## Files
 
@@ -20,6 +20,27 @@ Version: **0.3.0** (shown in the dev overlay).
 
 Upload `index.html` and `conductor-audio-v3.mp3` together. If the MP3 is missing or cannot be
 loaded, the app still runs on the built-in synthesizer (the heavier v0.2 engine).
+
+## What changed in 0.4 — the hand guide
+
+The gesture hand is redrawn as refined line art (poses are unchanged):
+
+- digits taper from base to tip; the outline is thinner (1.1 px); the wrist is shorter and its
+  outline fades out, so the eye goes to the fingertips;
+- a tap shows a crisp gold ring with a centre dot and one expanding ripple (was a gold blob);
+- in the big demo only, knuckle creases and a fingernail hint mark the digits that move;
+- swipes and pinch-and-drag show a motion arrow beside the finger (the thumb's path,
+  lengthened) and a fading comet trail behind the thumb pad;
+- the thumb rests a little higher, so the two fingertips visibly travel towards each other;
+- dock icons use the same style with a slightly larger fingertip crop.
+
+**Fix:** since 0.2 the swipe-up/down demo moved the thumb the wrong way (the "up" half went
+down) and the thumb rode on the underside of the index finger, because the finger normal was
+flipped. Both are corrected and covered by a direction check.
+
+Drawing cost (desktop, per frame with the big demo and three dock icons): 0.97 ms in 0.3,
+0.63 ms in 0.4. The demo hand itself costs more (0.35 → 0.52 ms), but still dock icons are
+now stamped from a cache (0.12 → 0.004 ms each), and they are on screen most of the time.
 
 ## What changed in 0.3 — audio on the glasses
 
