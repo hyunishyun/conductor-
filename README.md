@@ -2,45 +2,76 @@
 
 *One gesture begins a note. Every gesture brings your orchestra to life.*
 
-A standalone Web App (single `index.html`, no build step, no dependencies) that teaches the
-Meta Ray-Ban Display / Meta Neural Band control gestures by turning the wearer into the
-conductor of an orchestra. An animated hand shows each gesture as it is introduced, every
-gesture produces an immediate musical response, and the melody played by the very first
-pinch grows into a full orchestral movement.
+A standalone Web App that teaches the Meta Ray-Ban Display / Meta Neural Band control gestures
+by turning the wearer into the conductor of an orchestra. An animated hand shows each gesture
+as it is introduced, every gesture produces an immediate musical response, and the melody
+played by the very first pinch grows into a full orchestral movement.
 
-Version: **0.2.0** (shown in the dev overlay).
+Version: **0.3.0** (shown in the dev overlay).
 
-## What changed in 0.2
+## Files
 
-**Audio no longer breaks up on the glasses.** In 0.1 the finale reached 174 simultaneous
-sound sources, and the engine rendered only 2.7× faster than real time on a desktop CPU,
-with digital clipping (peak 1.17). The glasses' processor could not keep up once more
-sections joined. Measured with the same finale in an offline render:
-
-| | v0.1 | v0.2 |
+| File | Needed on the web host | Purpose |
 |---|---|---|
-| Peak simultaneous sources | 177 | 57 |
-| Sources created over 8 finale bars | 1712 | 571 |
-| Render speed (desktop CPU) | 2.7× real time | 6.9× real time |
-| Peak level / clipped samples | 1.17 / 24 | 0.89 / 0 |
+| `index.html` | yes | The app. |
+| `conductor-audio-v3.mp3` | yes | All instrument samples in one file (1.3 MB), next to `index.html`. |
+| `README.md` | no | This document. |
+| `tools/build-sprite.js` | no | Rebuilds the MP3 from the synth (Node + Playwright + ffmpeg). |
 
-How: a voice budget with per-section caps and oldest-note stealing (40 ms fade), tails that
-stop once inaudible, one shared vibrato LFO per section, brass chords sharing one filter,
-two saws per string note (one for doublings), no per-note bass filter, short woodwind breath
-noise, a lighter looping solo voice (the first pinch keeps the full, rich voice), a 2.0 s
-reverb (was 2.8 s), a brick-wall limiter, a 350 ms scheduler lookahead (was 160 ms),
-`latencyHint: 'balanced'`, and pre-rendered glow sprites that take load off the main thread.
+Upload `index.html` and `conductor-audio-v3.mp3` together. If the MP3 is missing or cannot be
+loaded, the app still runs on the built-in synthesizer (the heavier v0.2 engine).
 
-**The gesture guide is now the centre of the app.** A line-art hand (right hand, thumb side)
-demonstrates each gesture large in the middle of the stage when it is introduced, names it,
-and describes the motion. On the first correct input it shrinks into a dock of small icons at
-the bottom, which stays as a reminder. Icons flash gold when their input arrives, pulse when a
-different gesture was used, and the big demo replays after 7 s without the expected input.
+## What changed in 0.3 — audio on the glasses
 
-**A new chapter teaches Back.** Pinch opens a section's card (the other sections drop away
-so the chosen one plays alone); the middle-finger pinch demo appears; Back closes the card
-and the orchestra returns. The wearer does it once guided and once alone. Back from the main
-stage opens a pause popup: Pinch restarts, Back keeps conducting.
+Web Apps run on the glasses' own low-power processor. v0.2 synthesized every note live
+(oscillators, filters, a convolution reverb, vibrato LFOs), and on the glasses the sound broke
+up from the moment sections joined in Chapter II. v0.3 plays pre-rendered samples instead.
+
+`tools/build-sprite.js` renders every note, chord and the final chord from the v0.2 synth,
+with the hall reverb baked in, normalises each one, and packs them into one MP3 sprite with a
+click marker at the start. At runtime:
+
+- the sprite is fetched and decoded while the silent opening screen is showing, through an
+  `OfflineAudioContext`, so no playing `AudioContext` exists before the first pinch;
+- the click marker is located to cancel any MP3 encoder delay (measured alignment error
+  under 1 ms for percussive samples);
+- each note is one `AudioBufferSourceNode` + one `GainNode` reading its region of the shared
+  buffer; a string chord is one sample instead of seven oscillators;
+- there is no live reverb, no LFO and no per-note filter; the per-section gain and brightness
+  filter, the Back-chapter duck and the pause duck work as before;
+- sounding notes per section are capped (solo 4, strings 5, woodwinds 4, brass 3, timpani 2)
+  and a displaced tail fades over ~0.2 s like a natural decay;
+- the engine is chosen when the context is created and kept until restart;
+- a +3.8 dB make-up gain matches the loudness of v0.2 (measured within ±0.8 dB).
+
+The canvas is also capped at 30 fps, halving the drawing work that competes with audio.
+
+Measured headroom (desktop CPU, notes scheduled 350 ms ahead exactly like the live app;
+higher is better — v0.2 started breaking up on the glasses at about 12×):
+
+| | Chapter I | Chapter II | Finale |
+|---|---|---|---|
+| v0.1 synth | 19.4× | 7.0× | 3.4× |
+| v0.2 synth | 24.6× | 12.2× | 7.7× |
+| **v0.3 samples** | **97.5×** | **64.0×** | **45.9×** |
+| v0.3 synth fallback | 29.9× | 13.1× | 8.3× |
+
+A correction to the 0.2 notes: the 0.2 figures were measured with every note scheduled
+before rendering. That method slows down with the total number of notes (not-yet-started
+nodes are processed too), so it overstated the load. The table above uses live-style
+scheduling for every version.
+
+## What 0.2 added
+
+**Gesture guide.** A line-art hand (right hand, thumb side) demonstrates each gesture large in
+the middle of the stage when it is introduced, names it and describes the motion. On the first
+correct input it shrinks into a dock of small icons at the bottom. Icons flash gold when their
+input arrives, pulse when a different gesture was used, and the big demo replays after 7 s
+without the expected input.
+
+**Back chapter.** Pinch opens a section's card (that section plays alone), the middle-finger
+pinch demo appears, Back closes the card and the orchestra returns — once guided, once alone.
+Back from the main stage opens a pause popup: Pinch restarts, Back keeps conducting.
 
 ## Gestures and the inputs they produce
 
@@ -61,71 +92,70 @@ pinch-and-drag, `D` = developer overlay.
 
 1. **The First Note** — one pinch, one note. Eight pinches play the melody; the shared clock
    then starts and the phrase repeats.
-2. **Find Your Orchestra** — swipe left/right to move between Strings, Woodwinds and Brass
-   (visual only); pinch brings the focused section in.
-3. **Step Back** — pinch opens a section's card (that section plays alone), Back closes it.
-   Twice.
+2. **Find Your Orchestra** — swipe left/right between Strings, Woodwinds and Brass (visual
+   only); pinch brings the focused section in.
+3. **Step Back** — pinch opens a section's card, Back closes it. Twice.
 4. **Shape the Music** — swipe up/down changes the focused section's dynamics; crescendo to ff.
-5. **Conduct the Tempo** — pinch and drag sweeps the tempo; swipe up/down also changes it
-   (±4 BPM). Reach Allegro (108).
+5. **Conduct the Tempo** — pinch and drag sweeps the tempo; swipe up/down also changes it.
+   Reach Allegro (108).
 6. **The Finale** — pinch cues the full orchestra, pinch again brings it home: ritardando,
    final chord, "Bravo", then "Pinch to conduct again".
 
-## How the music engine works
+## Timing and structure
 
-Everything is synthesized with the Web Audio API; there are no audio files and no services.
-No `AudioContext` exists until the first `Enter`; it is created inside that handler and the
-first note is scheduled 10 ms later. A single lookahead scheduler counts 16th-note steps and
-every section's pattern is a function of that step and its time, so layers cannot drift.
-Tempo changes only alter the length of future steps. Dynamics move each section's bus gain and
-lowpass cutoff with smooth `setTargetAtTime` ramps; the Back chapter uses a separate duck gain
-per section, and the pause popup ducks the master. Hiding the page suspends the context and
-the clock; returning resumes both. Restart closes the context entirely.
+A single lookahead scheduler (350 ms) counts 16th-note steps; every section's pattern is a
+function of that step and its time, so layers cannot drift, and tempo changes only alter the
+length of future steps. Sustained samples (string chords, doublings) are cut at the note's end
+with a short release, so they follow any tempo between 60 and 140 BPM. Hiding the page
+suspends the context and the clock; restart closes the context entirely.
 
-Back handling: the Meta docs say Back arrives as `Escape` or as `history.back()`. When a popup
-opens the app adds one history entry. If the system goes back through history, `popstate`
-closes the popup instead of leaving the app. The app never calls `history.back()` itself, so a
-Back cannot be applied twice.
+Back handling: when a popup opens the app adds one history entry. If the system Back goes
+through history, `popstate` closes the popup instead of leaving the app. The app never calls
+`history.back()` itself.
 
 ## Testing
 
-Desktop: open `index.html` in Chrome, click the page, press Enter. Press `D` for the overlay.
+**Desktop:** the MP3 must be served over HTTP; opened by double-click (`file://`) the browser
+blocks the fetch and the app uses the synth fallback. In the CONDUCTOR folder run
+`python -m http.server 8000` and open `http://localhost:8000/`. Press `D` for the overlay; its
+first line shows `engine: samples · samples ready`.
 
-Simulator: install the **Meta Ray-Ban Display Simulator** Chrome extension, open the hosted URL,
-switch the simulator on and use its D-pad and Select buttons.
+**Simulator:** install the Meta Ray-Ban Display Simulator Chrome extension and open the hosted
+URL.
 
-Glasses: host at a public HTTPS URL (GitHub Pages) and connect it in the Meta AI app under
-App Settings → Apps → Web Apps → Connect Web App. For diagnostics on the glasses, connect a
-second Web App with the same URL plus `#dev` (for example
-`https://yourname.github.io/conductor/#dev`); it opens with the overlay showing.
+**Glasses:** host both files at a public HTTPS URL (GitHub Pages) and connect it in the Meta AI
+app under App Settings → Apps → Web Apps → Connect Web App. For diagnostics, connect a second
+Web App with `#dev` appended (for example `https://yourname.github.io/conductor/#dev`).
 
-The overlay shows: audio state and latency, sources allocated now and peak (this includes the
-350 ms already scheduled ahead, so it reads higher than the number actually sounding), stolen
-notes, the latest-scheduled note lateness, the scheduler's longest timer gap, clock resyncs,
-the expected gesture, card/pause state and a timestamped log (including visibility changes).
+Overlay fields: engine and sample state, audio state and latency, sources allocated (includes
+the 350 ms scheduled ahead), stolen notes, the latest-scheduled note lateness, the scheduler's
+longest timer gap, clock resyncs, the expected gesture, card/pause state and a log (sample
+loading time, visibility changes, Back source).
 
-An automated headless-Chromium run of this build passed 28 checks covering silence before
-input, one note per first pinch, repeat/duplicate/rapid-input rejection, the idle hint, every
-chapter transition, the card and both Back paths (Escape and history), the pause popup,
-dynamics, drag tempo, four layers on one grid, the finale and restart.
+Automated headless-Chromium runs of this build: 30/30 checks with samples, 30/30 with the synth
+fallback, plus a check that a sprite arriving after the first pinch keeps that session on the
+synth and switches to samples after restart.
 
 ## Still to verify on the glasses
 
-1. **Stutter gone?** Play through the finale. If it still breaks up, open the `#dev` Web App
-   and note `max timer gap`, `late notes max`, `resyncs` and `stolen` near the finale.
-2. **Back gesture delivery.** Does the middle-finger pinch close the card, or leave the app
-   for the system menu? The log shows whether it arrived as a key or as `history back`.
-3. **Swipe direction.** Compare with the glasses' own tutorial. If thumb-toward-fingertip
-   produces `ArrowRight` rather than `ArrowLeft`, set `SWIPE_FLIP = true` in the Gestures
-   module so the chevrons match.
-4. **Legibility of the hand** on the additive display in daylight, and whether the 0.3 stage
-   dim behind the big demo is enough.
-5. **Pinch and drag** scale (`0.22 BPM per px`) and whether a plain pinch also produces a
-   pointer sequence.
-6. **Web Audio through the glasses speaker** — already working per your test.
+1. **Stutter gone?** Play through Chapter II and the finale. In the `#dev` Web App the overlay
+   must show `engine: samples`. If it still breaks up, note `max timer gap`, `late notes max`,
+   `resyncs` near the break.
+2. **Sample loading** time on the glasses (logged as `samples ready … ms`).
+3. **Back gesture delivery** — closes the card, or leaves the app? The log shows the source.
+4. **Swipe direction** — if thumb-toward-fingertip produces `ArrowRight`, set `SWIPE_FLIP = true`.
+5. **Legibility of the hand** on the additive display in daylight.
+6. **Pinch and drag** scale (`0.22 BPM per px`).
+
+## Rebuilding the samples
+
+After changing a synth voice or the score, run `node tools/build-sprite.js` in the CONDUCTOR
+folder (requires Node, `npm i playwright`, and ffmpeg). It rewrites `conductor-audio-v3.mp3`
+and the sample map inside `index.html`. Give the MP3 a new name (`OUT` in the script) whenever
+its content changes, so browsers never mix an old sprite with a new map.
 
 ## Extending
 
-`Score` holds the musical material, `Layers.onStep` the arrangement, `Gestures.INFO` the
-gesture names and descriptions, `Gestures.pose` the hand animation per gesture, and
+`Score` holds the musical material, `Layers.onStep` the arrangement, `Audio.play` the musical
+API (each call picks samples or synth), `Gestures.INFO` / `Gestures.pose` the hand guide, and
 `Game` the chapters (`firstCue`, `enter2`…`enter6`, `onAction`, `expected`).

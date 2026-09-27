@@ -6,7 +6,7 @@
 <title>CONDUCTOR</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Manrope:wght@400;500;600&display=swap">
 <style>
-/* CONDUCTOR v0.2 — gesture tutorial for Meta Ray-Ban Display.
+/* CONDUCTOR v0.3 — gesture tutorial for Meta Ray-Ban Display.
    Single-theme by design: the glasses display is additive, so pure black is transparent. */
 :root{
   --ink:#000000;
@@ -80,10 +80,10 @@ body{font-family:var(--ui);display:flex;align-items:center;justify-content:cente
 <script>
 'use strict';
 /* =====================================================================
-   CONDUCTOR v0.2 — modules
+   CONDUCTOR v0.3 — modules
    Log       verification log (dev overlay: key D, or #dev in the URL)
    Score     the original melody and harmony
-   Audio     Web Audio synth orchestra: buses, voice budget, reverb, limiter
+   Audio     sample engine (pre-rendered sprite) + synth fallback, buses, voice budget
    Clock     shared musical clock (lookahead scheduler, tempo, ritardando)
    Layers    instrument sections that read the same step counter
    Gestures  animated hand guide: big demo, docked icons, input feedback
@@ -93,7 +93,7 @@ body{font-family:var(--ui);display:flex;align-items:center;justify-content:cente
    Game      the six chapters (state machine)
    Dev       overlay for verifying audio/clock behaviour
    ===================================================================== */
-const VERSION = '0.2.0';
+const VERSION = '0.3.0';
 const TAU = Math.PI * 2;
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -129,69 +129,104 @@ const Score = {
 Score.melodyStarts = (() => { let s = 0; return Score.melody.map(m => { const o = s; s += m.len; return o; }); })();
 
 /* ---------------- Audio ---------------- */
-/* v0.2 voice budget: every note is registered as a voice on its bus. Each bus has a
-   cap; when a new note would exceed it, the oldest sounding note fades out over ~40 ms
-   at the new note's start time. Tails stop when they become inaudible, vibrato comes
-   from one shared LFO per section, and brass chords share one filter. */
+/* v0.3: two engines behind one API.
+   SAMPLES (default): every note, chord and the final chord were pre-rendered from the
+   synth below, with the hall reverb baked in, into one MP3 sprite. At runtime a note is
+   one AudioBufferSourceNode + one GainNode reading a region of that shared buffer.
+   No oscillators, no live reverb, no vibrato LFOs, no per-note filters.
+   SYNTH (fallback): the v0.2 synthesizer, used only if the sprite cannot be loaded.
+   Its reverb and vibrato LFOs are built lazily, on the first synth note. */
+const SAMPLE_MAKEUP = 1.55;   /* +3.8 dB, matched against the v0.2 synth by measurement */
+const SPRITE = /*SPRITE-MAP*/{"url":"conductor-audio-v3.mp3","rate":32000,"marker":0.05,"map":{"solo_74":[0.35,3.13,0.72139],"solo_76":[3.52998,3.13,0.71904],"solo_78":[6.70996,3.2227,0.7187],"solo_81":[9.98263,3.1751,0.73101],"solo_83":[13.20771,3.1299,0.74577],"solo_86":[16.38758,3.13,0.72462],"soloOct_74":[19.56756,3.13,0.68267],"soloOct_76":[22.74754,3.13,0.68127],"soloOct_78":[25.92752,3.1299,0.68135],"soloOct_81":[29.10746,3.1299,0.68155],"soloOct_83":[32.28737,3.13,0.68179],"pad_D":[35.46735,5.4023,0.63086],"padHi_D":[40.91969,3.2198,0.18297],"brassPair_D":[44.1895,1.3072,0.14356],"brassL_D":[45.54671,1.698,0.29733],"brassM_D":[47.29475,1.2216,0.21436],"brassS_D":[48.56631,0.9819,0.21409],"pad_Bm":[49.59821,5.3802,0.56108],"padHi_Bm":[55.0284,3.0843,0.18192],"brassPair_Bm":[58.16273,1.2426,0.14969],"brassL_Bm":[59.45529,1.3886,0.23314],"brassM_Bm":[60.89388,1.2188,0.1643],"brassS_Bm":[62.16269,1.0636,0.16443],"pad_G":[63.27633,5.3878,0.54844],"padHi_G":[68.71417,3.1409,0.17247],"brassPair_G":[71.90504,1.4163,0.15218],"brassL_G":[73.37133,1.6016,0.23757],"brassM_G":[75.0229,1.2416,0.17496],"brassS_G":[76.3145,0.8152,0.16462],"pad_A":[77.17969,5.3005,0.59859],"padHi_A":[82.53021,3.116,0.17704],"brassPair_A":[85.69621,1.3072,0.15095],"brassL_A":[87.0534,1.504,0.22814],"brassM_A":[88.60738,1.284,0.16424],"brassS_A":[89.94142,0.9573,0.15983],"smel_62":[90.94869,2.6069,0.10297],"smel_64":[93.60556,2.7085,0.0992],"smel_66":[96.36404,2.6373,0.09868],"smel_69":[99.05137,2.6123,0.10113],"smel_71":[101.71371,2.6367,0.1034],"windsL_73":[104.40044,1.2542,0.15087],"windsS_73":[105.70465,0.9134,0.13615],"windsL_74":[106.668,1.0499,0.14895],"windsS_74":[107.7679,0.9532,0.13717],"windsL_76":[108.77112,1.2786,0.15421],"windsS_76":[110.09975,0.8829,0.13414],"windsL_78":[111.03269,1.2083,0.15473],"windsS_78":[112.291,0.764,0.13138],"windsL_79":[113.10502,1.0168,0.15678],"windsS_79":[114.17179,0.838,0.13275],"windsL_81":[115.05981,1.3175,0.14857],"windsS_81":[116.42731,0.7832,0.13685],"windsL_83":[117.26048,1.3111,0.15208],"windsS_83":[118.62162,1.1422,0.13097],"windsL_85":[119.81381,1.0085,0.15458],"windsS_85":[120.87235,0.985,0.13499],"windsL_86":[121.90731,1.0506,0.16019],"windsS_86":[123.00787,0.8533,0.13336],"timp_38":[123.91121,1.53,1.01117],"timp_35":[125.49119,1.5291,1.01432],"timp_31":[127.07029,1.53,1.023],"timp_33":[128.65027,1.53,1.02265],"final":[130.23025,6.2934,1.90105]}}/*END-SPRITE-MAP*/;
 const Audio = (() => {
-  let ctx = null, master = null, duck = null, reverb = null, noiseBuf = null;
+  let ctx = null, master = null, duck = null, direct = null, reverb = null, noiseBuf = null;
   const bus = {};
   const BUS = {
-    solo:    { level: 0.85, send: 0.50, filter: false, cap: 10, vib: 0 },
-    strings: { level: 0.72, send: 0.42, filter: true,  cap: 16, vib: 6, rate: 5.1 },
-    winds:   { level: 0.50, send: 0.45, filter: true,  cap: 8,  vib: 4, rate: 5.6 },
-    brass:   { level: 0.52, send: 0.30, filter: true,  cap: 12, vib: 5, rate: 5.4 },
-    perc:    { level: 0.78, send: 0.26, filter: false, cap: 6,  vib: 0 }
+    /* cap = sounding notes per section in the sample engine (synth uses capSynth) */
+    solo:    { level: 0.85, send: 0.50, filter: false, cap: 4, capSynth: 10, vib: 0 },
+    strings: { level: 0.72, send: 0.42, filter: true,  cap: 5, capSynth: 16, vib: 6, rate: 5.1 },
+    winds:   { level: 0.50, send: 0.45, filter: true,  cap: 4, capSynth: 10, vib: 4, rate: 5.6 },
+    brass:   { level: 0.52, send: 0.30, filter: true,  cap: 3, capSynth: 12, vib: 5, rate: 5.4 },
+    perc:    { level: 0.78, send: 0.26, filter: false, cap: 2, capSynth: 6,  vib: 0 }
   };
-  const stats = { userNotes: 0, scheduledNotes: 0, active: 0, peak: 0, stolen: 0, maxLateMs: 0 };
+  const stats = { userNotes: 0, scheduledNotes: 0, active: 0, peak: 0, stolen: 0, maxLateMs: 0, engine: 'none', synthNotes: 0 };
+  const S = { buf: null, offset: 0, ready: false, failed: false, state: 'idle', forceSynth: false };
 
-  function makeIR(sec) {
-    const len = Math.floor(ctx.sampleRate * sec);
-    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
-    for (let c = 0; c < 2; c++) {
-      const d = buf.getChannelData(c);
-      for (let i = 0; i < len; i++) { const x = i / len; d[i] = (Math.random() * 2 - 1) * Math.pow(1 - x, 2.9) * (1 - Math.exp(-i / 240)); }
+  /* ---- sprite loading: fetch + decode on page load, with no AudioContext ---- */
+  async function loadSprite() {
+    if (!SPRITE.url || S.state !== 'idle') return;
+    S.state = 'loading'; const t0 = performance.now();
+    try {
+      const res = await fetch(SPRITE.url, { cache: 'force-cache' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.arrayBuffer(); const bytes = data.byteLength;
+      const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+      const dec = new OAC(1, 1, SPRITE.rate);
+      const buf = await new Promise((ok, no) => { const p = dec.decodeAudioData(data, ok, no); if (p && p.then) p.then(ok, no); });
+      /* the sprite starts with a click marker; find it to cancel the MP3 encoder delay */
+      const d = buf.getChannelData(0), lim = Math.min(d.length, Math.floor(buf.sampleRate * (SPRITE.marker + 0.2)));   /* stays clear of the first sample */
+      let pk = 0, pi = 0; for (let i = 0; i < lim; i++) { const a = Math.abs(d[i]); if (a > pk) { pk = a; pi = i; } }
+      S.offset = pi / buf.sampleRate - SPRITE.marker; S.buf = buf; S.ready = true; S.state = 'ready';
+      Log.add(`samples ready: ${(bytes / 1048576).toFixed(2)} MB, ${buf.duration.toFixed(1)} s @ ${buf.sampleRate} Hz, offset ${(S.offset * 1000).toFixed(1)} ms, ${Math.round(performance.now() - t0)} ms`);
+    } catch (e) {
+      S.failed = true; S.state = 'failed';
+      Log.add(`samples unavailable (${e && e.message ? e.message : e}) → synth fallback`);
     }
-    return buf;
   }
-  function makeNoise() {
-    const b = ctx.createBuffer(1, ctx.sampleRate >> 1, ctx.sampleRate); const d = b.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    return b;
-  }
+  /* the engine is chosen when the context is created and kept until restart, so levels and caps never change mid-piece */
+  let ctxEngine = null;
+  const useSamples = () => S.ready && !S.forceSynth && (ctx ? ctxEngine === 'samples' : true);
+
   /* Create the context. Only ever called from inside a user-gesture handler. */
   function ensure() {
     if (ctx) { if (ctx.state === 'suspended') ctx.resume().catch(() => {}); return ctx; }
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) { Log.add('Web Audio API unavailable'); return null; }
+    ctxEngine = S.ready && !S.forceSynth ? 'samples' : 'synth';
     ctx = new AC({ latencyHint: 'balanced' });
-    Object.assign(stats, { active: 0, peak: 0, stolen: 0, maxLateMs: 0 });
+    Object.assign(stats, { active: 0, peak: 0, stolen: 0, maxLateMs: 0, synthNotes: 0 });
+    reverb = null; noiseBuf = null;
     const lat = ctx.baseLatency ? ` · base latency ${(ctx.baseLatency * 1000).toFixed(0)} ms` : '';
-    Log.add(`AudioContext created by user gesture (state ${ctx.state}, ${ctx.sampleRate} Hz${lat})`);
+    Log.add(`AudioContext created by user gesture (state ${ctx.state}, ${ctx.sampleRate} Hz${lat}) · engine ${useSamples() ? 'samples' : 'synth'}`);
     if (ctx.state === 'suspended') ctx.resume().then(() => Log.add('AudioContext resumed → running')).catch(e => Log.add('resume failed: ' + e));
-    /* master → duck → glue compressor → brick-wall limiter → out */
-    const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -18; comp.knee.value = 10; comp.ratio.value = 3; comp.attack.value = 0.006; comp.release.value = 0.25;
+    /* buses → master → duck → limiter → out. 'direct' carries the pre-mixed final chord. */
     const lim = ctx.createDynamicsCompressor();
     lim.threshold.value = -4; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.002; lim.release.value = 0.12;
-    master = ctx.createGain(); master.gain.value = 0.62;
+    /* samples are mono and their tails are capped, so they sit ~4 dB under the synth: make up for it */
+    master = ctx.createGain(); master.gain.value = 0.62 * (useSamples() ? SAMPLE_MAKEUP : 1);
     duck = ctx.createGain(); duck.gain.value = 1;
-    master.connect(duck); duck.connect(comp); comp.connect(lim); lim.connect(ctx.destination);
-    reverb = ctx.createConvolver(); reverb.buffer = makeIR(2.0);
-    const ret = ctx.createGain(); ret.gain.value = 0.55; reverb.connect(ret); ret.connect(master);
-    noiseBuf = makeNoise();
+    direct = ctx.createGain(); direct.gain.value = 1; direct.connect(master);
+    master.connect(duck); duck.connect(lim); lim.connect(ctx.destination);
     for (const [name, def] of Object.entries(BUS)) {
       const inp = ctx.createGain(); let node = inp, filter = null;
       if (def.filter) { filter = ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 2600; filter.Q.value = 0.5; inp.connect(filter); node = filter; }
       const level = ctx.createGain(); level.gain.value = def.level;
-      const send = ctx.createGain(); send.gain.value = def.send;
-      node.connect(level); level.connect(master); level.connect(send); send.connect(reverb);
-      let vib = null;
-      if (def.vib) { const l = ctx.createOscillator(); l.frequency.value = def.rate; vib = ctx.createGain(); vib.gain.value = def.vib; l.connect(vib); l.start(); }
-      bus[name] = { inp, filter, level, send, vib, base: def.level, cap: def.cap, intensity: 1, duck: 1, voices: [] };
+      node.connect(level); level.connect(master);
+      bus[name] = { inp, filter, level, vib: null, def, base: def.level, cap: useSamples() ? def.cap : def.capSynth, intensity: 1, duck: 1, voices: [] };
     }
+    stats.engine = useSamples() ? 'samples' : 'synth';
+    if (!useSamples()) synthGraph();   /* build reverb now, so the first synth note is not late */
     return ctx;
   }
+  /* synth-only nodes, built the first time the synth actually plays */
+  function synthGraph() {
+    if (reverb) return;
+    reverb = ctx.createConvolver(); reverb.buffer = makeIR(2.0);
+    const ret = ctx.createGain(); ret.gain.value = 0.55; reverb.connect(ret); ret.connect(master);
+    noiseBuf = makeNoise();
+    for (const b of Object.values(bus)) {
+      const send = ctx.createGain(); send.gain.value = b.def.send; b.level.connect(send); send.connect(reverb);
+      if (b.def.vib) { const l = ctx.createOscillator(); l.frequency.value = b.def.rate; b.vib = ctx.createGain(); b.vib.gain.value = b.def.vib; l.connect(b.vib); l.start(); }
+    }
+    Log.add('synth graph built (reverb + vibrato)');
+  }
+  function makeIR(sec) {
+    const len = Math.floor(ctx.sampleRate * sec); const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < len; i++) { const x = i / len; d[i] = (Math.random() * 2 - 1) * Math.pow(1 - x, 2.9) * (1 - Math.exp(-i / 240)); } }
+    return buf;
+  }
+  function makeNoise() { const b = ctx.createBuffer(1, ctx.sampleRate >> 1, ctx.sampleRate); const d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; return b; }
+
   function applyLevel(name, tc = 0.09) {
     const b = bus[name]; if (!b || !ctx) return; const v = b.intensity, t = ctx.currentTime;
     b.level.gain.setTargetAtTime(b.base * (0.04 + 0.96 * Math.pow(v, 1.5)) * b.duck, t, tc);
@@ -205,9 +240,10 @@ const Audio = (() => {
   function osc(type, f, t) { const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, t); return o; }
   function hold(p, t) { if (p.cancelAndHoldAtTime) p.cancelAndHoldAtTime(t); else p.cancelScheduledValues(t); }
   function steal(v, t) {
-    v.env.forEach(p => { try { hold(p, t); p.setTargetAtTime(0, t, 0.012); } catch (_) {} });
-    v.srcs.forEach(s => { try { s.stop(t + 0.08); } catch (_) {} });
-    v.end = t + 0.08; stats.stolen++;
+    const tau = v.gentle ? 0.045 : 0.012, stop = t + tau * 5;
+    v.env.forEach(p => { try { hold(p, t); p.setTargetAtTime(0, t, tau); } catch (_) {} });
+    v.srcs.forEach(s => { try { s.stop(stop); } catch (_) {} });
+    v.end = stop; stats.stolen++;
   }
   /* register a note on its bus; enforce the cap; keep live counts for the dev overlay */
   function voice(name, t, end, env, srcs, vibbed) {
@@ -223,106 +259,161 @@ const Audio = (() => {
       let oldest = 0; for (let i = 1; i < b.voices.length; i++) if (b.voices[i].t < b.voices[oldest].t) oldest = i;
       steal(b.voices[oldest], t); b.voices.splice(oldest, 1);
     }
-    b.voices.push({ t, end, env, srcs });
+    b.voices.push({ t, end, env, srcs, gentle: useSamples() });
     if (!(ctx instanceof (window.OfflineAudioContext || function () {}))) {
       const late = ctx.currentTime - t; if (late > 0.002) stats.maxLateMs = Math.max(stats.maxLateMs, late * 1000);
     }
   }
 
-  /* The soloist: a harp-like cue. mode 'rich' (notes the wearer plays, chimes) adds a third
-     partial and a soft bowed bloom an octave below; 'loop' (the repeating phrase) uses two
-     partials because the strings already give it body; 'light' is a single sine for octave
-     doublings. This keeps the first pinch lush and the finale affordable. */
-  function playSolo(midi, t, vel = 0.8, mode = 'rich') {
-    if (!ctx) return; const f = mtof(midi), b = bus.solo, srcs = [], env = [];
-    const parts = mode === 'light' ? [['sine', 1, 0.5, 0.35]]
-      : mode === 'loop' ? [['sine', 1, 0.62, 0.62], ['triangle', 2, 0.14, 0.30]]
-      : [['sine', 1, 0.62, 0.62], ['triangle', 2, 0.14, 0.30], ['sine', 3.003, 0.06, 0.16]];
-    let end = t;
-    parts.forEach(([type, r, gn, tau]) => {
-      const o = osc(type, f * r, t), g = G(), stop = t + tau * 5;
-      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gn * vel, t + 0.005); g.gain.setTargetAtTime(0, t + 0.012, tau);
-      o.connect(g); g.connect(b.inp); o.start(t); o.stop(stop); srcs.push(o); env.push(g.gain); end = Math.max(end, stop);
-    });
-    if (mode === 'rich') {
-      const bl = osc('sine', f / 2, t), bg = G();
-      bg.gain.setValueAtTime(0, t); bg.gain.linearRampToValueAtTime(0.11 * vel, t + 0.14); bg.gain.setTargetAtTime(0, t + 0.16, 0.6);
-      bl.connect(bg); bg.connect(b.inp); bl.start(t); bl.stop(t + 3.2); srcs.push(bl); env.push(bg.gain); end = Math.max(end, t + 3.2);
-    }
-    voice('solo', t, end, env, srcs, false);
+  /* ---- SAMPLE engine: one region of the shared buffer per note ---- */
+  function sp(name, busName, t, gain = 1, cut, rel = 0.25) {
+    const m = SPRITE.map[name]; if (!m) { Log.add('missing sample ' + name); return; }
+    const s = ctx.createBufferSource(); s.buffer = S.buf;
+    gain *= m[2] || 1;                                   /* per-sample level stored by the sprite builder */
+    const g = G(); g.gain.setValueAtTime(gain, t);
+    let len = m[1];
+    if (cut !== undefined && cut + rel * 5 < len) { g.gain.setValueAtTime(gain, t + cut); g.gain.setTargetAtTime(0, t + cut, rel); len = cut + rel * 5; }
+    s.connect(g); g.connect(busName === 'direct' ? direct : bus[busName].inp);
+    s.start(t, Math.max(0, m[0] + S.offset), len);
+    voice(busName === 'direct' ? 'solo' : busName, t, t + len, [g.gain], [s], false);
   }
-  /* Strings: two detuned saws per note with a bow attack (was three). Doublings use one. */
-  function playStrings(midi, t, dur, vel = 0.8, saws = 2) {
-    if (!ctx) return; const f = mtof(midi), b = bus.strings;
-    const g = G(), peak = (saws === 2 ? 0.09 : 0.12) * vel, att = Math.min(0.3, dur * 0.45), end = t + dur + 0.85;
-    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + att); g.gain.setTargetAtTime(0, t + dur, 0.17);
-    const srcs = (saws === 2 ? [-7, 7] : [0]).map(dt => { const o = osc('sawtooth', f, t); o.detune.setValueAtTime(dt, t); o.connect(g); o.start(t); o.stop(end); return o; });
-    g.connect(b.inp); voice('strings', t, end, [g.gain], srcs, true);
-  }
-  /* Bass: triangle + sine sub, no per-note filter (was saw + sub through a lowpass). */
-  function playStringsBass(midi, t, dur, vel = 0.9) {
-    if (!ctx) return; const f = mtof(midi), b = bus.strings;
-    const g = G(), end = t + dur + 0.8;
-    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.2 * vel, t + Math.min(0.25, dur * 0.4)); g.gain.setTargetAtTime(0, t + dur, 0.15);
-    const o = osc('triangle', f, t), s = osc('sine', f / 2, t), sg = G(); sg.gain.value = 0.55;
-    o.connect(g); s.connect(sg); sg.connect(g); g.connect(b.inp);
-    o.start(t); s.start(t); o.stop(end); s.stop(end);
-    voice('strings', t, end, [g.gain], [o, s], false);
-  }
-  /* Woodwinds: one triangle per note; the breath transient is optional and short. */
-  function playWinds(midi, t, dur, vel = 0.6, breath = true) {
-    if (!ctx) return; const f = mtof(midi), b = bus.winds;
-    const g = G(), end = t + dur + 0.4;
-    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.22 * vel, t + 0.035); g.gain.setTargetAtTime(0, t + dur, 0.07);
-    const o = osc('triangle', f, t); o.connect(g); g.connect(b.inp); o.start(t); o.stop(end);
-    const srcs = [o], env = [g.gain];
-    if (breath) {
+
+  /* ---- SYNTH engine (v0.2 voices) — also the source the sprite is rendered from ---- */
+  const syn = {
+    solo(midi, t, vel = 0.8, mode = 'rich') {
+      const f = mtof(midi), b = bus.solo, srcs = [], env = [];
+      const parts = mode === 'light' ? [['sine', 1, 0.5, 0.35]]
+        : mode === 'loop' ? [['sine', 1, 0.62, 0.62], ['triangle', 2, 0.14, 0.30]]
+        : [['sine', 1, 0.62, 0.62], ['triangle', 2, 0.14, 0.30], ['sine', 3.003, 0.06, 0.16]];
+      let end = t;
+      parts.forEach(([type, r, gn, tau]) => {
+        const o = osc(type, f * r, t), g = G(), stop = t + tau * 5;
+        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gn * vel, t + 0.005); g.gain.setTargetAtTime(0, t + 0.012, tau);
+        o.connect(g); g.connect(b.inp); o.start(t); o.stop(stop); srcs.push(o); env.push(g.gain); end = Math.max(end, stop);
+      });
+      if (mode === 'rich') {
+        const bl = osc('sine', f / 2, t), bg = G();
+        bg.gain.setValueAtTime(0, t); bg.gain.linearRampToValueAtTime(0.11 * vel, t + 0.14); bg.gain.setTargetAtTime(0, t + 0.16, 0.6);
+        bl.connect(bg); bg.connect(b.inp); bl.start(t); bl.stop(t + 3.2); srcs.push(bl); env.push(bg.gain); end = Math.max(end, t + 3.2);
+      }
+      voice('solo', t, end, env, srcs, false);
+    },
+    strings(midi, t, dur, vel = 0.8, saws = 2) {
+      const f = mtof(midi), b = bus.strings;
+      const g = G(), peak = (saws === 2 ? 0.09 : 0.12) * vel, att = Math.min(0.3, dur * 0.45), end = t + dur + 0.85;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + att); g.gain.setTargetAtTime(0, t + dur, 0.17);
+      const srcs = (saws === 2 ? [-7, 7] : [0]).map(dt => { const o = osc('sawtooth', f, t); o.detune.setValueAtTime(dt, t); o.connect(g); o.start(t); o.stop(end); return o; });
+      g.connect(b.inp); voice('strings', t, end, [g.gain], srcs, true);
+    },
+    bass(midi, t, dur, vel = 0.9) {
+      const f = mtof(midi), b = bus.strings, g = G(), end = t + dur + 0.8;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.2 * vel, t + Math.min(0.25, dur * 0.4)); g.gain.setTargetAtTime(0, t + dur, 0.15);
+      const o = osc('triangle', f, t), s = osc('sine', f / 2, t), sg = G(); sg.gain.value = 0.55;
+      o.connect(g); s.connect(sg); sg.connect(g); g.connect(b.inp); o.start(t); s.start(t); o.stop(end); s.stop(end);
+      voice('strings', t, end, [g.gain], [o, s], false);
+    },
+    winds(midi, t, dur, vel = 0.6, breath = true) {
+      const f = mtof(midi), b = bus.winds, g = G(), end = t + dur + 0.4;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.22 * vel, t + 0.035); g.gain.setTargetAtTime(0, t + dur, 0.07);
+      const o = osc('triangle', f, t); o.connect(g); g.connect(b.inp); o.start(t); o.stop(end);
+      const srcs = [o], env = [g.gain];
+      if (breath) {
+        const n = ctx.createBufferSource(); n.buffer = noiseBuf;
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f * 2; bp.Q.value = 7;
+        const ng = G(); ng.gain.setValueAtTime(0, t); ng.gain.linearRampToValueAtTime(0.03 * vel, t + 0.012); ng.gain.setTargetAtTime(0, t + 0.02, 0.03);
+        n.connect(bp); bp.connect(ng); ng.connect(b.inp); n.start(t); n.stop(t + 0.15); srcs.push(n); env.push(ng.gain);
+      }
+      voice('winds', t, end, env, srcs, true);
+    },
+    brass(notes, t, dur, vel = 0.6) {
+      const b = bus.brass, end = t + dur + 0.55;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 1.1;
+      lp.frequency.setValueAtTime(220, t); lp.frequency.linearRampToValueAtTime(900 + vel * 3200, t + 0.05); lp.frequency.setTargetAtTime(650 + vel * 1600, t + 0.06, 0.28);
+      const g = G(), peak = 0.11 * vel / Math.sqrt(Math.max(1, notes.length * 0.6));
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + 0.03); g.gain.setTargetAtTime(0, t + dur, 0.11);
+      const srcs = [];
+      notes.forEach((n, i) => {
+        const f = mtof(n); const o = osc('sawtooth', f, t); o.connect(lp); o.start(t); o.stop(end); srcs.push(o);
+        if (i === 0) { const o2 = osc('sawtooth', f, t); o2.detune.setValueAtTime(6, t); o2.connect(lp); o2.start(t); o2.stop(end); srcs.push(o2); }
+      });
+      lp.connect(g); g.connect(b.inp); voice('brass', t, end, [g.gain], srcs, true);
+    },
+    timpani(midi, t, vel = 0.8) {
+      const f = mtof(midi), b = bus.perc;
+      const o = osc('sine', f * 1.7, t); o.frequency.exponentialRampToValueAtTime(f, t + 0.045);
+      const g = G(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.9 * vel, t + 0.006); g.gain.setTargetAtTime(0, t + 0.02, 0.28);
+      o.connect(g); g.connect(b.inp); o.start(t); o.stop(t + 1.5);
       const n = ctx.createBufferSource(); n.buffer = noiseBuf;
-      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f * 2; bp.Q.value = 7;
-      const ng = G(); ng.gain.setValueAtTime(0, t); ng.gain.linearRampToValueAtTime(0.03 * vel, t + 0.012); ng.gain.setTargetAtTime(0, t + 0.02, 0.03);
-      n.connect(bp); bp.connect(ng); ng.connect(b.inp); n.start(t); n.stop(t + 0.15); srcs.push(n); env.push(ng.gain);
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500;
+      const ng = G(); ng.gain.setValueAtTime(0.18 * vel, t); ng.gain.setTargetAtTime(0, t + 0.005, 0.05);
+      n.connect(lp); lp.connect(ng); ng.connect(b.inp); n.start(t); n.stop(t + 0.3);
+      voice('perc', t, t + 1.5, [g.gain, ng.gain], [o, n], false);
     }
-    voice('winds', t, end, env, srcs, true);
-  }
-  /* Brass: all notes of a hit share one filter envelope and one gain; the lowest note is doubled. */
-  function playBrassChord(notes, t, dur, vel = 0.6) {
-    if (!ctx) return; const b = bus.brass, end = t + dur + 0.55;
-    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 1.1;
-    lp.frequency.setValueAtTime(220, t); lp.frequency.linearRampToValueAtTime(900 + vel * 3200, t + 0.05); lp.frequency.setTargetAtTime(650 + vel * 1600, t + 0.06, 0.28);
-    const g = G(), peak = 0.11 * vel / Math.sqrt(Math.max(1, notes.length * 0.6));
-    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + 0.03); g.gain.setTargetAtTime(0, t + dur, 0.11);
-    const srcs = [];
-    notes.forEach((n, i) => {
-      const f = mtof(n); const o = osc('sawtooth', f, t); o.connect(lp); o.start(t); o.stop(end); srcs.push(o);
-      if (i === 0) { const o2 = osc('sawtooth', f, t); o2.detune.setValueAtTime(6, t); o2.connect(lp); o2.start(t); o2.stop(end); srcs.push(o2); }
-    });
-    lp.connect(g); g.connect(b.inp); voice('brass', t, end, [g.gain], srcs, true);
-  }
-  function playTimpani(midi, t, vel = 0.8) {
-    if (!ctx) return; const f = mtof(midi), b = bus.perc;
-    const o = osc('sine', f * 1.7, t); o.frequency.exponentialRampToValueAtTime(f, t + 0.045);
-    const g = G(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.9 * vel, t + 0.006); g.gain.setTargetAtTime(0, t + 0.02, 0.28);
-    o.connect(g); g.connect(b.inp); o.start(t); o.stop(t + 1.5);
-    const n = ctx.createBufferSource(); n.buffer = noiseBuf;
-    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500;
-    const ng = G(); ng.gain.setValueAtTime(0.18 * vel, t); ng.gain.setTargetAtTime(0, t + 0.005, 0.05);
-    n.connect(lp); lp.connect(ng); ng.connect(b.inp); n.start(t); n.stop(t + 0.3);
-    voice('perc', t, t + 1.5, [g.gain, ng.gain], [o, n], false);
-  }
+  };
+  /* Musical API used by Layers and Game. Each call picks the engine. The render
+     settings (durations, velocities) of every sample are listed in SAMPLE_SPECS. */
+  const P = {
+    /* a note the wearer plays, and the card chimes: the full soloist voice */
+    solo(midi, t, vel = 0.85) { if (useSamples()) return sp('solo_' + midi, 'solo', t, vel); synthGraph(); stats.synthNotes++; syn.solo(midi, t, vel, 'rich'); },
+    /* the repeating phrase; in the finale the octave doubling is part of the sample */
+    melody(midi, t, finale) {
+      if (useSamples()) return finale ? sp('soloOct_' + midi, 'solo', t, 1) : sp('solo_' + midi, 'solo', t, 0.75);
+      synthGraph(); stats.synthNotes++; syn.solo(midi, t, 0.75, 'loop'); if (finale) syn.solo(midi + 12, t, 0.32, 'light');
+    },
+    pad(chord, t, dur) {
+      if (useSamples()) return sp('pad_' + chord.name, 'strings', t, 1, dur, 0.25);
+      synthGraph(); stats.synthNotes++; chord.tones.forEach(n => syn.strings(n, t, dur, 0.8)); syn.bass(chord.root, t, dur, 0.9);
+    },
+    padHi(chord, t, dur) {
+      if (useSamples()) return sp('padHi_' + chord.name, 'strings', t, 1, dur, 0.2);
+      synthGraph(); stats.synthNotes++; chord.tones.forEach(n => syn.strings(n + 12, t, dur, 0.45, 1));
+    },
+    stringsMel(midi, t, dur) {
+      if (useSamples()) return sp('smel_' + midi, 'strings', t, 1, dur, 0.2);
+      synthGraph(); stats.synthNotes++; syn.strings(midi, t, dur, 0.7, 1);
+    },
+    winds(midi, t, dur, short, breath) {
+      if (useSamples()) return sp((short ? 'windsS_' : 'windsL_') + midi, 'winds', t, 1);
+      synthGraph(); stats.synthNotes++; syn.winds(midi, t, dur, short ? 0.55 : 0.62, breath);
+    },
+    brassPair(chord, t, dur) {
+      if (useSamples()) return sp('brassPair_' + chord.name, 'brass', t, 1, dur + 0.2, 0.12);
+      synthGraph(); stats.synthNotes++; const n = chord.root + 12; syn.brass([n, n + 7], t, dur, 0.55);
+    },
+    brassHit(chord, kind, t, dur) {
+      if (useSamples()) return sp(`brass${kind}_` + chord.name, 'brass', t, 1);
+      synthGraph(); stats.synthNotes++; syn.brass([chord.root + 12, ...chord.tones], t, dur, kind === 'L' ? 0.85 : 0.62);
+    },
+    timpani(midi, t, vel) {
+      if (useSamples()) return sp('timp_' + midi, 'perc', t, vel);
+      synthGraph(); stats.synthNotes++; syn.timpani(midi, t, vel);
+    },
+    final(t) {
+      if (useSamples()) return sp('final', 'direct', t, 1);
+      synthGraph(); stats.synthNotes++;
+      [62, 66, 69, 74].forEach(n => syn.strings(n, t, 5.2, 0.95)); syn.bass(50, t, 5.2, 1);
+      [74, 78, 81, 86].forEach((n, i) => syn.winds(n, t + i * 0.02, 4.4, 0.6, i === 0));
+      syn.brass([50, 62, 66, 69], t, 4.6, 0.95);
+      [74, 78, 81, 86].forEach((n, i) => syn.solo(n, t + i * 0.09, 0.85, 'rich'));
+      syn.timpani(38, t, 1); syn.timpani(38, t + 0.5, 0.5);
+    }
+  };
   function suspend() { if (ctx && ctx.state === 'running') ctx.suspend().then(() => Log.add('AudioContext suspended (page hidden)')).catch(() => {}); }
   function resume() { if (ctx && ctx.state === 'suspended') ctx.resume().then(() => Log.add('AudioContext resumed (page visible)')).catch(() => {}); }
   /* Fade and close the whole context. The next first pinch builds a fresh one. */
   function shutdown() {
     if (!ctx) return; const c = ctx, m = master;
     try { m.gain.setTargetAtTime(0, c.currentTime, 0.07); } catch (_) {}
-    ctx = null; master = null; duck = null; for (const k in bus) delete bus[k];
+    ctx = null; master = null; duck = null; direct = null; reverb = null; for (const k in bus) delete bus[k];
+    stats.engine = 'none';
     setTimeout(() => { c.close().then(() => Log.add('AudioContext closed')).catch(() => {}); }, 450);
   }
   return {
-    ctx: () => ctx, stats, ensure, setIntensity, setDuck, duckAll, suspend, resume, shutdown,
-    playSolo, playStrings, playStringsBass, playWinds, playBrassChord, playTimpani,
-    playBrass: (m, t, d, v) => playBrassChord([m], t, d, v),
-    now: () => (ctx ? ctx.currentTime : 0), bus: () => bus
+    ctx: () => ctx, stats, sprite: S, loadSprite, useSamples, ensure, setIntensity, setDuck, duckAll, suspend, resume, shutdown,
+    play: P, synth: syn, synthGraph, BUS,
+    now: () => (ctx ? ctx.currentTime : 0), bus: () => bus,
+    /* build tool hooks (used only by the sprite renderer) */
+    _setBusFlat() { for (const b of Object.values(bus)) { b.level.gain.value = 1; if (b.filter) b.filter.frequency.value = 20000; } master.gain.value = 1; }
   };
 })();
 
@@ -383,9 +474,11 @@ const Layers = (() => {
   const L = {};
   ['solo', 'strings', 'winds', 'brass', 'perc'].forEach(n => L[n] = { joined: false, joinStep: 0, lastStep: -1, lastT: 0 });
   const St = { mode: 'phrase', phase: 0, pendingPhase: null, finalStep: null, rollFrom: null, done: false };
+  const A = Audio.play;
   const active = (name, step) => L[name].joined && step >= L[name].joinStep;
   const ev = (t, section, midi, vel, kind) => Visual.queue.push({ t, section, midi, vel, kind });
   const mark = (name, step, t) => { L[name].lastStep = step; L[name].lastT = t; };
+  const windsUp = chord => [...chord.tones, chord.tones[0] + 12].map(n => n + 12);
 
   function onStep(step, t, dur) {
     if (St.done) return;
@@ -395,63 +488,43 @@ const Layers = (() => {
       Log.add(`finale phase ${St.phase} from bar ${bar}`); Game.onPhase(St.phase, t);
     }
     if (St.finalStep !== null && step === St.finalStep) {
-      finalChord(t); St.done = true; Clock.stop(); Game.onFinalChord(t); return;
+      A.final(t); finalEvents(t); St.done = true; Clock.stop(); Game.onFinalChord(t); return;
     }
     const finale = St.mode === 'finale';
     const mi = Score.melodyStarts.indexOf(mpos);
 
     if (active('solo', step)) {
-      if (mi >= 0) {
-        const m = Score.melody[mi];
-        Audio.playSolo(m.n, t, 0.75, 'loop'); ev(t, 'solo', m.n, 0.75);
-        if (finale) Audio.playSolo(m.n + 12, t, 0.32, 'light');
-      }
+      if (mi >= 0) { const m = Score.melody[mi]; A.melody(m.n, t, finale); ev(t, 'solo', m.n, 0.75); }
       mark('solo', step, t);
     }
     if (active('strings', step)) {
-      if (pos === 0) {
-        chord.tones.forEach(n => Audio.playStrings(n, t, dur * 16, 0.8));
-        Audio.playStringsBass(chord.root, t, dur * 16, 0.9);
-        ev(t, 'strings', chord.tones[0], 0.8);
-      }
-      if (finale && pos === 8) { chord.tones.forEach(n => Audio.playStrings(n + 12, t, dur * 8, 0.45, 1)); ev(t, 'strings', chord.tones[2] + 12, 0.5); }
-      if (St.phase >= 2 && mi >= 0) { const m = Score.melody[mi]; Audio.playStrings(m.n - 12, t, dur * m.len, 0.7, 1); }
+      if (pos === 0) { A.pad(chord, t, dur * 16); ev(t, 'strings', chord.tones[0], 0.8); }
+      if (finale && pos === 8) { A.padHi(chord, t, dur * 8); ev(t, 'strings', chord.tones[2] + 12, 0.5); }
+      if (St.phase >= 2 && mi >= 0) { const m = Score.melody[mi]; A.stringsMel(m.n - 12, t, dur * m.len); }
       mark('strings', step, t);
     }
     if (active('winds', step)) {
-      const up = [...chord.tones, chord.tones[0] + 12].map(n => n + 12);
-      if (finale) { const seq = [0, 1, 2, 3, 2, 1]; const n = up[seq[pos % 6]]; Audio.playWinds(n, t, dur * 1.1, 0.55, pos % 4 === 0); ev(t, 'winds', n, 0.5); }
-      else if (pos % 2 === 0) { const seq = [0, 1, 2, 3, 2, 1, 0, 1]; const n = up[seq[pos / 2]]; Audio.playWinds(n, t, dur * 2.1, 0.62, pos % 4 === 0); ev(t, 'winds', n, 0.62); }
+      const up = windsUp(chord);
+      if (finale) { const seq = [0, 1, 2, 3, 2, 1]; const n = up[seq[pos % 6]]; A.winds(n, t, dur * 1.1, true, pos % 4 === 0); ev(t, 'winds', n, 0.5); }
+      else if (pos % 2 === 0) { const seq = [0, 1, 2, 3, 2, 1, 0, 1]; const n = up[seq[pos / 2]]; A.winds(n, t, dur * 2.1, false, pos % 4 === 0); ev(t, 'winds', n, 0.62); }
       mark('winds', step, t);
     }
     if (active('brass', step)) {
       if (finale) {
-        const hits = { 0: 6, 6: 2, 8: 4, 12: 4 };
-        if (hits[pos] !== undefined) {
-          const vel = pos === 0 ? 0.85 : 0.62;
-          Audio.playBrassChord([chord.root + 12, ...chord.tones], t, dur * hits[pos] * 0.9, vel);
-          ev(t, 'brass', chord.tones[0], vel);
-        }
-      } else if (pos === 0 || pos === 8) {
-        const n = chord.root + 12;
-        Audio.playBrassChord([n, n + 7], t, dur * 4, 0.55); ev(t, 'brass', n, 0.55);
-      }
+        const hits = { 0: ['L', 6], 6: ['S', 2], 8: ['M', 4], 12: ['M', 4] };
+        if (hits[pos]) { A.brassHit(chord, hits[pos][0], t, dur * hits[pos][1] * 0.9); ev(t, 'brass', chord.tones[0], pos === 0 ? 0.85 : 0.62); }
+      } else if (pos === 0 || pos === 8) { A.brassPair(chord, t, dur * 4); ev(t, 'brass', chord.root + 12, 0.55); }
       mark('brass', step, t);
     }
     if (St.phase >= 2 && active('perc', step)) {
-      if (pos === 0 || pos === 8) { Audio.playTimpani(chord.root - 12, t, pos === 0 ? 0.9 : 0.6); ev(t, 'perc', chord.root, 0.8); }
+      if (pos === 0 || pos === 8) { A.timpani(chord.root - 12, t, pos === 0 ? 0.9 : 0.6); ev(t, 'perc', chord.root, 0.8); }
       mark('perc', step, t);
     }
     if (St.rollFrom !== null && step >= St.rollFrom && step < St.finalStep) {
-      const k = (step - St.rollFrom) / 8; Audio.playTimpani(38, t, 0.35 + 0.6 * k); ev(t, 'perc', 38, 0.4 + 0.5 * k);
+      const k = (step - St.rollFrom) / 8; A.timpani(38, t, 0.35 + 0.6 * k); ev(t, 'perc', 38, 0.4 + 0.5 * k);
     }
   }
-  function finalChord(t) {
-    [62, 66, 69, 74].forEach(n => Audio.playStrings(n, t, 5.2, 0.95)); Audio.playStringsBass(50, t, 5.2, 1);
-    [74, 78, 81, 86].forEach((n, i) => Audio.playWinds(n, t + i * 0.02, 4.4, 0.6, i === 0));
-    Audio.playBrassChord([50, 62, 66, 69], t, 4.6, 0.95);
-    [74, 78, 81, 86].forEach((n, i) => Audio.playSolo(n, t + i * 0.09, 0.85));
-    Audio.playTimpani(38, t, 1); Audio.playTimpani(38, t + 0.5, 0.5);
+  function finalEvents(t) {
     ev(t, 'solo', 86, 1, 'final'); ev(t, 'strings', 74, 1); ev(t, 'winds', 86, 1); ev(t, 'brass', 69, 1); ev(t, 'perc', 38, 1);
     Log.add(`final chord at ${t.toFixed(3)}s`);
   }
@@ -464,19 +537,13 @@ const Layers = (() => {
     if (Clock.running && ctx) {
       const t = ctx.currentTime + 0.03, step = Clock.step, pos = step % 16, bar = Math.floor(step / 16);
       const chord = Score.chordAtBar(bar), remaining = (16 - pos) % 16, dur = remaining * Clock.stepDur();
-      if (name === 'strings' && pos !== 0) {
-        chord.tones.forEach(n => Audio.playStrings(n, t, dur, 0.8)); Audio.playStringsBass(chord.root, t, dur, 0.9);
-        ev(t, 'strings', chord.tones[0], 0.8);
-      }
-      if (name === 'brass' && pos % 8 !== 0) {
-        const n = chord.root + 12, d = Math.min(dur, 4 * Clock.stepDur());
-        Audio.playBrassChord([n, n + 7], t, d, 0.55); ev(t, 'brass', n, 0.55);
-      }
+      if (name === 'strings' && pos !== 0) { A.pad(chord, t, dur); ev(t, 'strings', chord.tones[0], 0.8); }
+      if (name === 'brass' && pos % 8 !== 0) { A.brassPair(chord, t, Math.min(dur, 4 * Clock.stepDur())); ev(t, 'brass', chord.root + 12, 0.55); }
     }
     Log.add(`${name} joined at step ${l.joinStep}`);
   }
   return {
-    onStep, join, state: St, layers: L,
+    onStep, join, state: St, layers: L, windsUp,
     setMode(m) { St.mode = m; },
     setPhase(p) { St.pendingPhase = p; },
     resolve() {
@@ -918,9 +985,12 @@ const Visual = (() => {
     }
     Gestures.draw(g, dt);
   }
+  /* v0.3: drawing is capped at 30 fps so the canvas leaves CPU for the audio thread */
+  const FRAME_MS = 1000 / 30;
   function frame(ts) {
     requestAnimationFrame(frame);
-    const dt = clamp((ts - last) / 1000 || 0.016, 0.001, 0.05); last = ts;
+    if (last && ts - last < FRAME_MS - 2) return;
+    const dt = clamp((ts - last) / 1000 || 0.033, 0.001, 0.07); last = ts;
     const ctx = Audio.ctx(); const now = ctx ? ctx.currentTime : 0;
     if (ctx) { const q = V.queue; let i = 0; while (i < q.length) { if (q[i].t <= now + 0.012) { trigger(q[i]); q.splice(i, 1); } else i++; } if (q.length > 400) q.splice(0, q.length - 400); }
     update(dt, now); draw(dt);
@@ -1049,7 +1119,7 @@ const Game = (() => {
   function playMelodyNote() {
     const ctx = Audio.ensure(); if (!ctx) return;
     const m = Score.melody[G.melodyIndex]; const t = ctx.currentTime + 0.01;
-    Audio.playSolo(m.n, t, 0.85); Audio.stats.userNotes++;
+    Audio.play.solo(m.n, t, 0.85); Audio.stats.userNotes++;
     Visual.queue.push({ t, section: 'solo', midi: m.n, vel: 0.9 }); Visual.cue();
     Log.add(`user note ${G.melodyIndex + 1}/8 (midi ${m.n}) at ${t.toFixed(3)}s`);
     G.melodyIndex++;
@@ -1095,7 +1165,7 @@ const Game = (() => {
     const s = focusName(); G.card = s; Nav.ensure();
     const ctx = Audio.ctx(); const t = ctx.currentTime + 0.01;
     for (const o of [...SECTIONS, 'solo']) if (o !== s) Audio.setDuck(o, 0.12);
-    Audio.playSolo(81, t, 0.32); Visual.queue.push({ t, section: s, midi: 81, vel: 0.6 }); Visual.cue(Visual.COL[s]);
+    Audio.play.solo(81, t, 0.32); Visual.queue.push({ t, section: s, midi: 81, vel: 0.6 }); Visual.cue(Visual.COL[s]);
     Visual.state.solo_section = s; Visual.state.dimTarget = 0.55;
     el.cardK.textContent = LABEL[s]; el.cardT.textContent = `${LABEL[s]} alone`; el.cardB.textContent = 'Only this section is playing now.';
     show(el.card, true);
@@ -1108,7 +1178,7 @@ const Game = (() => {
     const s = G.card; G.card = null;
     const ctx = Audio.ctx(); const t = ctx.currentTime + 0.01;
     for (const o of [...SECTIONS, 'solo']) Audio.setDuck(o, 1, 0.2);
-    Audio.playSolo(78, t, 0.28); Audio.playSolo(74, t + 0.1, 0.3); Visual.queue.push({ t, section: 'solo', midi: 74, vel: 0.5 }); Visual.cue();
+    Audio.play.solo(78, t, 0.28); Audio.play.solo(74, t + 0.1, 0.3); Visual.queue.push({ t, section: 'solo', midi: 74, vel: 0.5 }); Visual.cue();
     Visual.state.solo_section = null; Visual.state.dimTarget = 1;
     show(el.card, false); G.backCount++; Log.add(`card closed: ${s} (${G.backCount})`);
     if (G.backCount === 1) {
@@ -1249,6 +1319,7 @@ const Game = (() => {
     start() {
       /* cache the current dock so the pause popup can restore it */
       const sd = Gestures.setDock; Gestures.setDock = items => { if (!G.pause) G.dockCache = items; sd(items); };
+      Audio.loadSprite();
       Visual.init($('#c')); Input.init($('#stage')); Nav.init(); Input.on(onAction);
       enter(0, []); Gestures.teach('pinch');
       setInterval(idleCheck, 500);
@@ -1269,6 +1340,7 @@ const Dev = (() => {
   function render() {
     const ctx = Audio.ctx(); const L = Layers.layers; const G = Game.state; const st = Audio.stats;
     const lines = [`<h4>CONDUCTOR v${VERSION}</h4>`];
+    lines.push(`engine: ${st.engine} · samples ${Audio.sprite.state}` + (st.synthNotes ? ` · synth notes ${st.synthNotes}` : ''));
     lines.push(ctx ? `audio: ${ctx.state} · ${ctx.sampleRate} Hz` + (ctx.baseLatency ? `\nlatency: base ${(ctx.baseLatency * 1000).toFixed(0)} ms` + (ctx.outputLatency ? ` · out ${(ctx.outputLatency * 1000).toFixed(0)} ms` : '') : '') : 'audio: none (created on first pinch)');
     lines.push(`sources allocated ${st.active} · peak ${st.peak}\n(incl. ${Clock.lookahead * 1000} ms scheduled ahead) · stolen ${st.stolen}\nuser notes ${st.userNotes} · scheduled ${st.scheduledNotes}\nlate notes max ${st.maxLateMs.toFixed(1)} ms`);
     lines.push(`<h4>Clock</h4>` + (Clock.running ? `${Clock.bpm.toFixed(1)} bpm · step ${Clock.step} · bar ${Math.floor(Clock.step / 16)}\nlookahead ${Clock.lookahead * 1000} ms · max timer gap ${Clock.maxGapMs.toFixed(0)} ms\nresyncs ${Clock.resyncs}` : 'stopped'));
