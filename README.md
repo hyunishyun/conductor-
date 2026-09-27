@@ -7,7 +7,7 @@ by turning the wearer into the conductor of an orchestra. An animated hand shows
 as it is introduced, every gesture produces an immediate musical response, and the melody
 played by the very first pinch grows into a full orchestral movement.
 
-Version: **0.4.0** (shown in the dev overlay).
+Version: **0.5.0** (shown in the dev overlay).
 
 ## Files
 
@@ -20,6 +20,35 @@ Version: **0.4.0** (shown in the dev overlay).
 
 Upload `index.html` and `conductor-audio-v3.mp3` together. If the MP3 is missing or cannot be
 loaded, the app still runs on the built-in synthesizer (the heavier v0.2 engine).
+
+## What changed in 0.5 — smooth, seamless gesture loops
+
+**Swipes loop without a seam.** Each swipe demo was two strokes that each ended by sliding
+back to their start, so the next stroke began at the far end: the thumb teleported 23 units
+(left/right) or 10 units (up/down) halfway through and again at the loop point. Swipes now
+ping-pong: touch down, slide, lift in a small arc, touch down where the stroke ended, slide
+back, lift. The end of each stroke is the start of the next, so the loop has no seam. Slides
+use a quintic ease (zero speed and acceleration at both ends); touch-down and lift use a
+smoothstep. The thumb pad also glides round the middle knuckle instead of kinking there.
+
+**Drag** starts and stops at zero speed. **Contact rings, chevrons, the motion arrow and the
+trail** fade with the touch (150 ms or more) instead of switching on and off, and the drag
+chevron highlight follows the hand's speed. **Dock icons** play exactly one loop from their
+resting pose when they flash or pulse, so they never snap.
+
+Automated audits (thumb-tip path sampled 400× per loop): all five gestures have a loop seam
+of 0, no step larger than twice a normal moving step, and no fade that changes more than 10%
+per sample. v0.4 failed the swipe and drag checks.
+
+**Even frame pacing.** The 30 fps cap skipped frames by a millisecond threshold, so with
+normal vsync jitter it drew unevenly (60 Hz: 27.9 fps, spacing ±5.8 ms). It now measures the
+display refresh and draws on every Nth refresh (60 Hz → 2nd, 90 Hz → 3rd, 120 Hz → 4th,
+72 Hz → 2nd = 36 fps). Simulated with ±2 ms jitter: 30.0 fps ±1.7 ms at 60/90/120 Hz.
+
+**Size.** The big demo is 1.5× larger (hand about 340 px wide) and sits 28 px higher; its
+labels moved below it. Dock icons are 1.4× (1.5× would collide with the prompt, which moved
+up 16 px). Pause-popup icons keep their size to fit the rows. Drawing a frame with the big
+demo costs about 20% more than 0.4 because the hand covers 2.25× the area.
 
 ## What changed in 0.4 — the hand guide
 
