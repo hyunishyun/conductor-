@@ -7,7 +7,7 @@ by turning the wearer into the conductor of an orchestra. An animated hand shows
 as it is introduced, every gesture produces an immediate musical response, and the melody
 played by the very first pinch grows into a full orchestral movement.
 
-Version: **0.5.0** (shown in the dev overlay).
+Version: **0.6.0** (shown in the dev overlay).
 
 ## Files
 
@@ -20,6 +20,34 @@ Version: **0.5.0** (shown in the dev overlay).
 
 Upload `index.html` and `conductor-audio-v3.mp3` together. If the MP3 is missing or cannot be
 loaded, the app still runs on the built-in synthesizer (the heavier v0.2 engine).
+
+## What changed in 0.6 — the hand, redrawn
+
+The gesture hand is a new drawing: a **two-finger close-up** instead of a whole hand. A right
+hand, palm down, seen from the thumb side: the index finger comes in from the upper right and
+curls down, the thumb comes up from the lower right, and the two tips meet like a beak. The
+palm and the other fingers stay off-screen to the right; the web of skin between thumb and
+index keeps it reading as a hand. The middle finger sits behind the index and shows for Back.
+
+Why: on the 600 × 600 panel a whole hand leaves the fingertips, where every gesture happens,
+too small. The close-up makes the fingertip area about 3× larger than 0.5 (scale 4.3, hand
+about 330 px wide) without covering the prompt.
+
+Drawing:
+- each digit is one smooth filled outline through its joints (Catmull-Rom spline), with a
+  real width profile — knuckle bulges, taper, round pad — instead of straight tubes;
+- anatomical thumb: three segments rooted near the wrist, with the two joints sharing the
+  bend equally, so it is always a smooth arc (no V kink);
+- outlines fade out towards each digit's root, so no outline crosses the inside of the hand;
+- in a pinch both digits move: the index curls down while the thumb rises to meet it;
+- nails and knuckle creases on the moving digits in the big demo only.
+
+Layout: the overture wordmark and tagline moved to the top band; in the overture and in the
+Back chapter the demo is slightly smaller (3.6) and lower, and the section card in the Back
+chapter is now a one-line pill ("Strings · playing alone") above the hand. Dock icons are the
+fingertip crop of the same drawing. Motion timings are unchanged from 0.5 and the loop audit
+still passes (seam 0, no jumps, no fade pops). A frame with the big demo costs about 20 %
+more than 0.5 (0.22 ms for the hand itself on a desktop CPU).
 
 ## What changed in 0.5 — smooth, seamless gesture loops
 
